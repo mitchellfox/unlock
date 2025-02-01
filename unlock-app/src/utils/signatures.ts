@@ -1,4 +1,4 @@
-import * as sigUtil from 'eth-sig-util'
+import { ethers } from 'ethers'
 
 /**
  * Helper function which verifies that the signature matches the address and data
@@ -9,14 +9,17 @@ import * as sigUtil from 'eth-sig-util'
 export const isSignatureValidForAddress = (
   sig: string,
   data: string,
-  address: string
+  address: string,
+  locksmithSigners?: string[]
 ) => {
   try {
-    return (
-      sigUtil.recoverPersonalSignature({
-        data,
-        sig,
-      }) === address.toLowerCase()
+    const signer = ethers.verifyMessage(data, sig).toLowerCase().trim()
+    return !!(
+      signer === address.toLowerCase() ||
+      (locksmithSigners &&
+        locksmithSigners
+          ?.map((item) => item.toLowerCase().trim())
+          .includes(signer))
     )
   } catch (error) {
     console.error(error)

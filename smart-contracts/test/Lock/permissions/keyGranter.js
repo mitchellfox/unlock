@@ -1,61 +1,76 @@
-const { reverts } = require('truffle-assertions')
-const deployLocks = require('../../helpers/deployLocks')
-const getProxy = require('../../helpers/proxy')
+const assert = require('assert')
+const { ethers } = require('hardhat')
+const {
+  deployLock,
+  reverts,
+  KEY_GRANTER_ROLE,
+  LOCK_MANAGER_ROLE,
+} = require('../../helpers')
 
-const unlockContract = artifacts.require('Unlock.sol')
-
-let unlock
-let locks
 let lock
-let result
-let lockCreator
-let notAuthorized
-let newKeyGranter
+let lockCreator, notAuthorized, newKeyGranter
 
-contract('Permissions / KeyGranter', (accounts) => {
-  lockCreator = accounts[0]
-  notAuthorized = accounts[9]
-  newKeyGranter = accounts[1]
-
+describe('Permissions / KeyGranter', () => {
   before(async () => {
-    unlock = await getProxy(unlockContract)
-    locks = await deployLocks(unlock, lockCreator)
-    lock = locks.FIRST
+    ;[lockCreator, notAuthorized, newKeyGranter] = await ethers.getSigners()
+    lock = await deployLock()
   })
 
   describe('default permissions on a new lock', () => {
     it('should add the lock creator to the keyGranter role', async () => {
-      let result = await lock.isKeyGranter.call(lockCreator)
-      assert.equal(result, true)
+      assert.equal(
+        await lock.hasRole(KEY_GRANTER_ROLE, await lockCreator.getAddress()),
+        true
+      )
+      // lock creator is also added to the LockManager role by default
+      assert.equal(
+        await lock.hasRole(LOCK_MANAGER_ROLE, await lockCreator.getAddress()),
+        true
+      )
     })
   })
   describe('modifying permissions on an existing lock', () => {
-    // lock creator is also added to the LockManager role by default
     it('should allow a lockManager to add a KeyGranter', async () => {
-      result = await lock.isLockManager.call(lockCreator)
-      assert.equal(result, true)
-      await lock.addKeyGranter(newKeyGranter, { from: lockCreator })
-      result = await lock.isKeyGranter.call(newKeyGranter)
-      assert.equal(result, true)
+      assert.equal(
+        await lock.isLockManager(await lockCreator.getAddress()),
+        true
+      )
+      assert.equal(
+        await lock.hasRole(KEY_GRANTER_ROLE, await newKeyGranter.getAddress()),
+        false
+      )
+      await lock.grantRole(KEY_GRANTER_ROLE, await newKeyGranter.getAddress())
+      assert.equal(
+        await lock.hasRole(KEY_GRANTER_ROLE, await newKeyGranter.getAddress()),
+        true
+      )
     })
 
     it('should not allow anyone else to add a KeyGranter', async () => {
-      result = await lock.isLockManager.call(notAuthorized)
-      assert.equal(result, false)
+      assert.equal(
+        await lock.isLockManager(await notAuthorized.getAddress()),
+        false
+      )
       await reverts(
-        lock.addKeyGranter(accounts[5], { from: notAuthorized }),
-        'MixinRoles: caller does not have the LockManager role'
+        lock
+          .connect(notAuthorized)
+          .grantRole(KEY_GRANTER_ROLE, await newKeyGranter.getAddress()),
+        `is missing role ${LOCK_MANAGER_ROLE}`
       )
     })
 
     it('should only allow a lockManager to remove a KeyGranter', async () => {
       await reverts(
-        lock.revokeKeyGranter(newKeyGranter, { from: notAuthorized }),
-        'MixinRoles: caller does not have the LockManager role'
+        lock
+          .connect(notAuthorized)
+          .revokeRole(KEY_GRANTER_ROLE, await newKeyGranter.getAddress()),
+        `is missing role ${LOCK_MANAGER_ROLE}`
       )
-      await lock.revokeKeyGranter(newKeyGranter, { from: lockCreator })
-      result = await lock.isKeyGranter.call(newKeyGranter)
-      assert.equal(result, false)
+      await lock.revokeRole(KEY_GRANTER_ROLE, await newKeyGranter.getAddress())
+      assert.equal(
+        await lock.hasRole(KEY_GRANTER_ROLE, await newKeyGranter.getAddress()),
+        false
+      )
     })
   })
 })

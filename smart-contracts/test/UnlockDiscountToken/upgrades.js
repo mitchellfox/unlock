@@ -1,53 +1,100 @@
-const BigNumber = require('bignumber.js')
-const { time } = require('@openzeppelin/test-helpers')
-const { ethers, upgrades } = require('hardhat')
-const { constants, tokens, protocols } = require('hardlydifficult-eth')
+const assert = require('assert')
+const path = require('path')
+const fs = require('fs-extra')
+const { ethers, upgrades, network, run } = require('hardhat')
+const { ADDRESS_ZERO } = require('../helpers')
+const { createMockOracle, deployWETH, almostEqual } = require('../helpers')
+const deployContracts = require('../fixtures/deploy')
 
-const { getProxyAddress } = require('../../helpers/deployments')
-const createLockHash = require('../helpers/createLockCalldata')
+const {
+  createLockCalldata,
+  lockFixtures: Locks,
+  getEvent,
+} = require('@unlock-protocol/hardhat-helpers')
 
-const Locks = require('../fixtures/locks')
+// skip on coverage until solidity-coverage supports EIP-1559
+const describeOrSkip = process.env.IS_COVERAGE ? describe.skip : describe
 
-const estimateGas = 252166 * 2
+const estimateGas = BigInt(252166 * 2)
+
+// 1 UDT is worth ~0.00000042 ETH
+const UDT_WETH_RATE = ethers.parseEther('0.00000042')
+
+// files path
+const contractsPath = path.resolve(
+  __dirname,
+  '..',
+  '..',
+  'contracts',
+  'past-versions'
+)
+const artifactsPath = path.resolve(
+  __dirname,
+  '..',
+  '..',
+  'artifacts',
+  'contracts',
+  'past-versions'
+)
+
+const UnlockDiscountTokenV2 = require.resolve(
+  '@unlock-protocol/contracts/dist/UnlockDiscountToken/UnlockDiscountTokenV2.sol'
+)
 
 // helper function
 const upgradeContract = async (contractAddress) => {
-  const UnlockDiscountTokenV2 = await ethers.getContractFactory(
-    'UnlockDiscountTokenV2'
+  const UnlockDiscountTokenV3 = await ethers.getContractFactory(
+    'UnlockDiscountTokenV3'
   )
   const updated = await upgrades.upgradeProxy(
     contractAddress,
-    UnlockDiscountTokenV2,
+    UnlockDiscountTokenV3,
     {}
   )
   return updated
 }
 
-contract('UnlockDiscountToken upgrade', async () => {
+describe('UnlockDiscountToken upgrade', async () => {
   let udt
   const mintAmount = 1000
 
-  beforeEach(async () => {
-    const UnlockDiscountToken = await ethers.getContractFactory(
-      'UnlockDiscountToken'
+  before(async function copyAndBuildContract() {
+    // make sure mocha doesnt time out
+    this.timeout(200000)
+
+    // copy previous UDT version over
+    await fs.copy(
+      UnlockDiscountTokenV2,
+      path.resolve(contractsPath, 'UnlockDiscountTokenV2.sol')
     )
 
-    const [, minter] = await ethers.getSigners()
-    const udtSigned = await UnlockDiscountToken.connect(minter)
+    // re-compile contract using hardhat
+    await run('compile')
 
-    udt = await upgrades
-      .deployProxy(udtSigned, [minter.address], {
-        kind: 'transparent',
-        initializer: 'initialize(address)',
-      })
-      .then((f) => f.deployed())
+    // deploy udt
+    const UnlockDiscountToken = await ethers.getContractFactory(
+      'contracts/past-versions/UnlockDiscountTokenV2.sol:UnlockDiscountTokenV2'
+    )
+
+    const [deployer] = await ethers.getSigners()
+    const udtSigned = await UnlockDiscountToken.connect(deployer)
+
+    udt = await upgrades.deployProxy(udtSigned, [await deployer.getAddress()], {
+      kind: 'transparent',
+      initializer: 'initialize(address)',
+    })
+  })
+
+  after(async () => {
+    await fs.remove(contractsPath)
+    await fs.remove(artifactsPath)
   })
 
   describe('Details', () => {
     it('name is preserved', async () => {
       const name = await udt.name()
       assert.equal(name, 'Unlock Discount Token')
-      const updated = await upgradeContract(udt.address)
+      const updated = await upgradeContract(await udt.getAddress())
       const updatedName = await updated.name()
       assert.equal(updatedName, 'Unlock Discount Token')
     })
@@ -55,7 +102,7 @@ contract('UnlockDiscountToken upgrade', async () => {
     it('symbol is preserved', async () => {
       const symbol = await udt.symbol()
       assert.equal(symbol, 'UDT')
-      const updated = await upgradeContract(udt.address)
+      const updated = await upgradeContract(await udt.getAddress())
       const updatedSymbol = await updated.symbol()
       assert.equal(updatedSymbol, 'UDT')
     })
@@ -63,7 +110,7 @@ contract('UnlockDiscountToken upgrade', async () => {
     it('decimals are preserved', async () => {
       const decimals = await udt.decimals()
       assert.equal(decimals, 18)
-      const updated = await upgradeContract(udt.address)
+      const updated = await upgradeContract(await udt.getAddress())
       const updatedDecimals = await updated.decimals()
       assert.equal(updatedDecimals, 18)
     })
@@ -72,234 +119,175 @@ contract('UnlockDiscountToken upgrade', async () => {
   describe('Supply', () => {
     it('starting supply is 0', async () => {
       const totalSupply = await udt.totalSupply()
-      assert.equal(totalSupply.toNumber(), 0, 'starting supply must be 0')
+      assert.equal(totalSupply, 0, 'starting supply must be 0')
     })
 
     it('Supply is preserved after upgrade', async () => {
       const [, , recipient] = await ethers.getSigners()
 
       // mint some tokens
-      await udt.mint(recipient.address, mintAmount)
+      await udt.mint(await recipient.getAddress(), mintAmount)
       const totalSupply = await udt.totalSupply()
-      assert.equal(totalSupply.toNumber(), mintAmount)
+      assert.equal(totalSupply, mintAmount)
 
       // upgrade
-      const updated = await upgradeContract(udt.address)
+      const updated = await upgradeContract(await udt.getAddress())
 
       const totalSupplyAfterUpdate = await updated.totalSupply()
-      assert.equal(totalSupplyAfterUpdate.toNumber(), mintAmount)
+      assert.equal(totalSupplyAfterUpdate, mintAmount)
     })
   })
 
   describe('Minting tokens', () => {
-    let accounts
     let unlock
-    let minter
+    let deployer
+    let lockOwner
     let referrer
+    let referrer2
     let keyBuyer
     let lock
     let rate
 
-    beforeEach(async () => {
-      accounts = await ethers.getSigners()
-      minter = accounts[1]
-      referrer = accounts[2]
-      keyBuyer = accounts[3]
+    before(async () => {
+      ;[deployer, lockOwner, keyBuyer, referrer, referrer2] =
+        await ethers.getSigners()
 
-      const Unlock = await ethers.getContractFactory('Unlock')
-      const { chainId } = await ethers.provider.getNetwork()
-      const unlockAddress = getProxyAddress(chainId, 'Unlock')
-      unlock = Unlock.attach(unlockAddress)
+      const { unlock: unlockDeployed } = await deployContracts()
+      unlock = unlockDeployed
 
       // Grant Unlock minting permissions
-      await udt.addMinter(unlock.address)
+      await udt.addMinter(await unlock.getAddress())
 
       // upgrade contract
-      await upgradeContract(udt.address)
-      udt.connect(minter)
+      await upgradeContract(await udt.getAddress())
 
       // create lock
       const args = [
-        Locks.FIRST.expirationDuration.toFixed(),
-        web3.utils.padLeft(0, 40),
-        Locks.FIRST.keyPrice.toFixed(),
-        Locks.FIRST.maxNumberOfKeys.toFixed(),
+        Locks.FIRST.expirationDuration,
+        ADDRESS_ZERO,
+        Locks.FIRST.keyPrice,
+        Locks.FIRST.maxNumberOfKeys,
         Locks.FIRST.lockName,
       ]
-      const calldata = await createLockHash({ args })
-      const tx = await unlock.createLock(calldata)
+      const calldata = await createLockCalldata({
+        args,
+        from: await lockOwner.getAddress(),
+      })
+      const tx = await unlock.createUpgradeableLock(calldata)
 
-      const { events } = await tx.wait()
-      const evt = events.find((v) => v.event === 'NewLock')
-      const PublicLock = await ethers.getContractFactory('PublicLock')
+      const receipt = await tx.wait()
+      const evt = await getEvent(receipt, 'NewLock')
+      const PublicLock = await ethers.getContractFactory(
+        'contracts/PublicLock.sol:PublicLock'
+      )
       lock = await PublicLock.attach(evt.args.newLockAddress)
 
+      const weth = await deployWETH(deployer)
+
       // Deploy the exchange
-      const weth = await tokens.weth.deploy(web3, minter.address)
-      const uniswapRouter = await protocols.uniswapV2.deploy(
-        web3,
-        minter.address,
-        constants.ZERO_ADDRESS,
-        weth.address
-      )
-
-      // Create UDT <-> WETH pool
-      await udt.mint(minter.address, web3.utils.toWei('1000000', 'ether'))
-      await udt.approve(uniswapRouter.address, constants.MAX_UINT)
-      await uniswapRouter.addLiquidityETH(
-        udt.address,
-        web3.utils.toWei('1000000', 'ether'),
-        '1',
-        '1',
-        minter.address,
-        constants.MAX_UINT,
-        { from: minter.address, value: web3.utils.toWei('40', 'ether') }
-      )
-
-      const uniswapOracle = await protocols.uniswapOracle.deploy(
-        web3,
-        minter.address,
-        await uniswapRouter.factory()
-      )
-
-      // Advancing time to avoid an intermittent test fail
-      await time.increase(time.duration.hours(1))
-
-      // Do a swap so there is some data accumulated
-      await uniswapRouter.swapExactETHForTokens(
-        1,
-        [weth.address, udt.address],
-        minter.address,
-        constants.MAX_UINT,
-        { value: web3.utils.toWei('1', 'ether') }
-      )
+      const oracle = await createMockOracle({
+        rates: [
+          // UDT <> WETH rate
+          {
+            tokenIn: await udt.getAddress(),
+            rate: UDT_WETH_RATE,
+            tokenOut: await weth.getAddress(),
+          },
+        ],
+      })
 
       // Config in Unlock
       await unlock.configUnlock(
-        udt.address,
-        weth.address,
+        await udt.getAddress(),
+        await weth.getAddress(),
         estimateGas,
         await unlock.globalTokenSymbol(),
         await unlock.globalBaseTokenURI(),
         1 // mainnet
       )
-      await unlock.setOracle(udt.address, uniswapOracle.address)
 
-      // Advance time so 1 full period has past and then update again so we have data point to read
-      await time.increase(time.duration.hours(30))
-      await uniswapOracle.update(weth.address, udt.address, {
-        from: minter.address,
-      })
+      // set value in oracle
+      await unlock.setOracle(await udt.getAddress(), await oracle.getAddress())
 
-      // Purchase a valid key for the referrer
-      await lock.connect(referrer)
-      await lock.purchase(0, referrer.address, constants.ZERO_ADDRESS, [], {
-        value: await lock.keyPrice(),
-      })
+      // Purchase a valid key for the referrers
+      await lock
+        .connect(keyBuyer)
+        .purchase(
+          [],
+          [await referrer.getAddress(), await referrer2.getAddress()],
+          [ADDRESS_ZERO, ADDRESS_ZERO],
+          [ADDRESS_ZERO, ADDRESS_ZERO],
+          ['0x', '0x'],
+          {
+            value: (await lock.keyPrice()) * 2n,
+          }
+        )
 
-      rate = await uniswapOracle.consult(
-        udt.address,
-        web3.utils.toWei('1', 'ether'),
-        weth.address
+      // allow multiple keys per owner
+      await lock
+        .connect(lockOwner)
+        .updateLockConfig(
+          await lock.expirationDuration(),
+          await lock.maxNumberOfKeys(),
+          10
+        )
+
+      rate = await oracle.consult(
+        await udt.getAddress(),
+        ethers.parseUnits('1', 'ether'),
+        await weth.getAddress()
+      )
+
+      // Give unlock contract some tokens
+      await udt.mint(
+        await unlock.getAddress(),
+        ethers.parseUnits('1000000', 'ether')
       )
     })
 
-    it('exchange rate is > 0', async () => {
-      assert.notEqual(web3.utils.fromWei(rate.toString(), 'ether'), 0)
+    it('exchange rate is correct', async () => {
       // 1 UDT is worth ~0.000042 ETH
-      assert.equal(new BigNumber(rate).shiftedBy(-18).toFixed(5), '0.00004')
+      assert.equal(rate, UDT_WETH_RATE)
     })
 
     it('referrer has 0 UDT to start', async () => {
-      const actual = await udt.balanceOf(referrer.address)
-      assert.equal(actual.toString(), 0)
+      const actual = await udt.balanceOf(await referrer.getAddress())
+      assert.equal(actual, 0)
     })
 
-    it('owner starts with 0 UDT', async () => {
-      const owner = await unlock.owner()
-      const balance = await udt.balanceOf(owner)
-      assert(balance.eq(0), `balance not null ${balance.toString()}`)
-    })
+    describeOrSkip('mint by gas price', () => {
+      let balanceReferrerBefore
+      before(async () => {
+        balanceReferrerBefore = await udt.balanceOf(await referrer.getAddress())
 
-    describe('mint by gas price', () => {
-      let gasSpent
+        // set 1% protocol fee
+        await unlock.setProtocolFee(100)
 
-      beforeEach(async () => {
         // buy a key
         lock.connect(keyBuyer)
-        const tx = await lock.purchase(
-          0,
-          keyBuyer.address,
-          referrer.address,
+        const { blockNumber } = await lock.purchase(
           [],
+          [await keyBuyer.getAddress()],
+          [await referrer.getAddress()],
+          [ADDRESS_ZERO],
+          ['0x'],
           {
             value: await lock.keyPrice(),
           }
         )
-        // using estimatedGas instead of the actual gas used so this test does not regress as other features are implemented
-        gasSpent = new BigNumber(tx.gasPrice).times(estimateGas)
+
+        assert.equal(await lock.balanceOf(await keyBuyer.getAddress()), '1')
       })
 
       it('referrer has some UDT now', async () => {
-        const actual = await udt.balanceOf(referrer.address)
-        assert.notEqual(actual.toString(), 0)
-      })
+        // referrer got sth
+        const actual = await udt.balanceOf(await referrer.getAddress())
+        assert.notEqual(actual, 0n)
 
-      it('amount minted for referrer ~= gas spent', async () => {
-        // 120 UDT minted * 0.000042 ETH/UDT == 0.005 ETH spent
-        assert.equal(
-          new BigNumber(await udt.balanceOf(referrer.address))
-            .shiftedBy(-18) // shift UDT balance
-            .times(rate)
-            .shiftedBy(-18) // shift the rate
-            .toFixed(3),
-          gasSpent.shiftedBy(-18).toFixed(3)
-        )
-      })
-
-      it('amount minted for dev ~= gas spent * 20%', async () => {
-        assert.equal(
-          new BigNumber(await udt.balanceOf(await unlock.owner()))
-            .shiftedBy(-18) // shift UDT balance
-            .times(rate)
-            .shiftedBy(-18) // shift the rate
-            .toFixed(3),
-          gasSpent.times(0.25).shiftedBy(-18).toFixed(3)
-        )
-      })
-    })
-
-    describe('mint capped by % growth', () => {
-      beforeEach(async () => {
-        // 1,000,000 UDT minted thus far
-        // Test goal: 10 UDT minted for the referrer (less than the gas cost equivalent of ~120 UDT)
-        // keyPrice / GNP / 2 = 10 * 1.25 / 1,000,000 == 40,000 * keyPrice
-        const initialGdp = (await lock.keyPrice()).mul(40000)
-        await unlock.resetTrackedValue(initialGdp.toString(), 0)
-
-        lock.connect(keyBuyer)
-        await lock.purchase(0, keyBuyer.address, referrer.address, [], {
-          value: await lock.keyPrice(),
-        })
-      })
-
-      it('referrer has some UDT now', async () => {
-        const actual = await udt.balanceOf(referrer.address)
-        assert.notEqual(actual.toString(), 0)
-      })
-
-      it('amount minted for referrer ~= 10 UDT', async () => {
-        const balance = await udt.balanceOf(referrer.address)
-        const bn = new BigNumber(balance.toString())
-        assert.equal(bn.shiftedBy(-18).toFixed(0), '10')
-      })
-
-      it('amount minted for dev ~= 2 UDT', async () => {
-        const balance = await udt.balanceOf(await unlock.owner())
-        assert.equal(
-          new BigNumber(balance.toString()).shiftedBy(-18).toFixed(0),
-          '2'
-        )
+        // amount of UDT earned should be equal to half of the fee
+        const amountEarned = actual - balanceReferrerBefore
+        const fee = ((await lock.keyPrice()) * 100n) / 10000n
+        assert.equal(amountEarned, ((fee / 2n) * rate) / 10n ** 18n)
       })
     })
   })

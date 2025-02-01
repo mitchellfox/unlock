@@ -1,53 +1,70 @@
-/* eslint no-console: 0 */
-
 const dotenv = require('dotenv')
 const path = require('path')
-const { exportPaths } = require('./src/utils/exportStatic')
+const { withSentryConfig } = require('@sentry/nextjs')
 
-const unlockEnv = process.env.UNLOCK_ENV || 'dev'
+const unlockEnv = process.env.NEXT_PUBLIC_UNLOCK_ENV || 'dev'
 
 dotenv.config({
   path: path.resolve(__dirname, '..', `.env.${unlockEnv}.local`),
 })
 
-// TODO renames these: URLs need to be URLs, hosts need to be hosts... etc
-const requiredConfigVariables = {
+const requiredEnvs = {
   unlockEnv,
-  paywallUrl: process.env.PAYWALL_URL,
-  locksmithHost: process.env.LOCKSMITH_URI,
-  wedlocksUri: process.env.WEDLOCKS_URI,
-  unlockStaticUrl: process.env.UNLOCK_STATIC_URL,
-  base64WedlocksPublicKey: process.env.BASE64_WEDLOCKS_PUBLIC_KEY,
-  stripeApiKey: process.env.STRIPE_KEY,
+  base64WedlocksPublicKey: process.env.NEXT_PUBLIC_BASE64_WEDLOCKS_PUBLIC_KEY,
+  stripeApiKey:
+    process.env.NEXT_PUBLIC_STRIPE_KEY || 'pk_test_BHXKmScocCfrQ1oW8HTmnVrB',
+  ethPassApiKey: 'sk_live_h0pHRAZ2E6WTkNIrXvEzbEQN39Ftrp1p',
 }
-const optionalConfigVariables = {
-  httpProvider: process.env.HTTP_PROVIDER,
-}
-// If any env variable is missing, fail to run, except for dev which can set its own defaults
-Object.keys(requiredConfigVariables).forEach((configVariableName) => {
-  if (!requiredConfigVariables[configVariableName]) {
-    if (
-      ['dev', 'dev-kovan', 'test'].indexOf(requiredConfigVariables.unlockEnv) >
-      -1
-    ) {
-      return console.error(
-        `The configuration variable ${configVariableName} is falsy.`
-      )
-    }
-    throw new Error(
-      `The configuration variable ${configVariableName} is falsy.`
-    )
-  }
-})
 
-module.exports = {
-  publicRuntimeConfig: {
-    ...optionalConfigVariables,
-    ...requiredConfigVariables,
-  },
-  webpack(config) {
-    config.resolve.extensions = [...config.resolve.extensions, '.ts', '.tsx']
-    return config
-  },
-  exportPathMap: exportPaths,
+for (const [key, value] of Object.entries(requiredEnvs)) {
+  if (value) {
+    continue
+  }
+  if (unlockEnv !== 'dev') {
+    throw new Error(`${key} is missing in the environment. Please export.`)
+  } else {
+    console.error(`${key} is missing in the environment.`)
+  }
 }
+
+/** @type {import('next').NextConfig} */
+const config = {
+  productionBrowserSourceMaps: true,
+  sentry: {
+    disableServerWebpackPlugin: true,
+    disableClientWebpackPlugin: true,
+    hideSourceMaps: true,
+  },
+  transpilePackages: ['@tw-classed/react'],
+  images: {
+    unoptimized: true,
+  },
+  output: 'standalone',
+  experimental: {
+    // this includes files from the monorepo base directory up
+    outputFileTracingRoot: path.join(__dirname, '../'),
+  },
+  async redirects() {
+    return [
+      // redirect to locks page
+      {
+        source: '/dashboard',
+        destination: '/locks',
+        permanent: true,
+      },
+      // redirect to checkout page and preserve path
+      {
+        source: '/alpha/checkout/:path*',
+        destination: '/checkout/:path*',
+        permanent: true,
+      },
+      {
+        source: '/legacy/checkout/:path*',
+        destination: '/checkout/:path*',
+        permanent: true,
+      },
+    ]
+  },
+}
+
+module.exports = withSentryConfig(config)

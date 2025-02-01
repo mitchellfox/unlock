@@ -1,5 +1,4 @@
-const metadataOperations = require('../../src/operations/metadataOperations')
-require('../../src/models')
+import * as metadataOperations from '../../src/operations/metadataOperations'
 
 const chain = 31337
 
@@ -55,6 +54,14 @@ describe('metadataOperations', () => {
         )
         expect(updateStatus).toBe(false)
       })
+    })
+  })
+  describe('getKeyCentricData', () => {
+    it('should not fail if no tokenId is passed as it is not defined for pending RSVP keys', async () => {
+      expect.assertions(1)
+      const address = '0x123'
+      const data = await metadataOperations.getKeyCentricData(address)
+      expect(data).toEqual({})
     })
   })
 })

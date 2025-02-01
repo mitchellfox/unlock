@@ -1,14 +1,14 @@
 const { config, ethers, assert, network, upgrades } = require('hardhat')
-const OZ_SDK_EXPORT = require('../../openzeppelin-cli-export.json')
-const multisigABI = require('../helpers/ABIs/multisig.json')
-const proxyABI = require('../helpers/ABIs/proxy.json')
+const multisigABI = require('@unlock-protocol/hardhat-helpers/dist/ABIs/multisig.json')
+const proxyABI = require('@unlock-protocol/hardhat-helpers/dist/ABIs/proxy.json')
+const { getEvent } = require('@unlock-protocol/hardhat-helpers')
+const { mainnet } = require('@unlock-protocol/networks')
+const { ADDRESS_ZERO, getProxyAdminAddress } = require('../helpers')
 
 // NB : this needs to be run against a mainnet fork using
 // import proxy info using legacy OZ CLI file export after migration to @openzepplein/upgrades
-const [UDTProxyInfo] =
-  OZ_SDK_EXPORT.networks.mainnet.proxies['unlock-protocol/Unlock']
-const ProxyContractAddress = UDTProxyInfo.address // '0x90DE74265a416e1393A450752175AED98fe11517'
-const proxyAdminAddress = UDTProxyInfo.admin // '0x79918A4389A437906538E0bbf39918BfA4F7690e'
+const { unlockAddress: ProxyContractAddress } = mainnet // '0x90DE74265a416e1393A450752175AED98fe11517'
+const proxyAdminAddress = getProxyAdminAddress // '0x79918A4389A437906538E0bbf39918BfA4F7690e'
 
 const deployerAddress = '0x33ab07dF7f09e793dDD1E9A25b079989a557119A'
 const multisigAddress = '0xa39b44c4AFfbb56b76a1BF1d19Eb93a5DfC2EBA9'
@@ -52,8 +52,8 @@ const upgradeContract = async () => {
   )
 
   // get tx id
-  const { events } = await tx.wait()
-  const evt = events.find((v) => v.event === 'Confirmation')
+  const receipt = await tx.wait()
+  const evt = await getEvent(receipt, 'Confirmation')
   const transactionId = evt.args[1]
 
   // reach concensus
@@ -74,14 +74,14 @@ const upgradeContract = async () => {
   return Unlock.attach(ProxyContractAddress)
 }
 
-contract('Unlock (on mainnet)', async () => {
+describe('Unlock (on mainnet)', async () => {
   let unlock
   let deployer
 
   before(async function setupMainnetForkTestEnv() {
     this.timeout(2000000)
 
-    if (!process.env.RUN_MAINNET_FORK) {
+    if (!process.env.RUN_FORK) {
       // all suite will be skipped
       this.skip()
     }
@@ -106,7 +106,7 @@ contract('Unlock (on mainnet)', async () => {
     })
 
     // give some ETH to deployer
-    const balance = ethers.utils.hexStripZeros(ethers.utils.parseEther('1000'))
+    const balance = ethers.hexStripZeros(ethers.parseEther('1000'))
     await network.provider.send('hardhat_setBalance', [
       deployerAddress,
       balance,
@@ -122,7 +122,7 @@ contract('Unlock (on mainnet)', async () => {
   describe('The mainnet fork', () => {
     it('impersonates unlock deployer correctly', async () => {
       const { signer } = unlock
-      assert.equal(signer.address, deployerAddress)
+      assert.equal(await signer.getAddress(), deployerAddress)
     })
   })
 
@@ -131,7 +131,7 @@ contract('Unlock (on mainnet)', async () => {
       const globalTokenSymbolBefore = await unlock.globalTokenSymbol()
       const globalBaseTokenURIBefore = await unlock.globalBaseTokenURI()
       const grossNetworkProductBefore = await unlock.grossNetworkProduct()
-      const udtBefore = await unlock.udt()
+      const udtBefore = await unlock.governanceToken()
       const wethBefore = await unlock.weth()
       const publicLockAddressBefore = await unlock.publicLockAddress()
       const estimatedGasForPurchaseBefore =
@@ -141,19 +141,19 @@ contract('Unlock (on mainnet)', async () => {
       const globalTokenSymbolAfter = await updated.globalTokenSymbol()
       const globalBaseTokenURIAfter = await updated.globalBaseTokenURI()
       const grossNetworkProductAfter = await updated.grossNetworkProduct()
-      const udtAfter = await updated.udt()
+      const udtAfter = await updated.governanceToken()
       const wethAfter = await updated.weth()
       const publicLockAddressAfter = await updated.publicLockAddress()
       const estimatedGasForPurchaseAfter =
         await updated.estimatedGasForPurchase()
       assert.equal(globalTokenSymbolBefore, globalTokenSymbolAfter)
       assert.equal(globalBaseTokenURIBefore, globalBaseTokenURIAfter)
-      assert.equal(grossNetworkProductBefore.eq(grossNetworkProductAfter), true)
+      assert.equal(grossNetworkProductBefore == grossNetworkProductAfter, true)
       assert.equal(udtBefore, udtAfter)
       assert.equal(wethBefore, wethAfter)
       assert.equal(publicLockAddressBefore, publicLockAddressAfter)
       assert.equal(
-        estimatedGasForPurchaseBefore.eq(estimatedGasForPurchaseAfter),
+        estimatedGasForPurchaseBefore == estimatedGasForPurchaseAfter,
         true
       )
     })
@@ -162,31 +162,38 @@ contract('Unlock (on mainnet)', async () => {
       const updated = await upgradeContract()
       let tx = await updated.createLock(
         60, // expirationDuration: 1 minute!
-        web3.utils.padLeft(0, 40),
+        ADDRESS_ZERO,
         0, // keyPrice: in wei
         100, // maxNumberOfKeys
         'Upgrade Test Lock',
         '0x000000000000000000000000'
       )
-      const { events } = await tx.wait()
-      const evt = events.find(({ event }) => event === 'NewLock')
+      const receipt = await tx.wait()
+      const evt = await getEvent(receipt, 'NewLock')
 
-      const PublicLock = await ethers.getContractFactory('PublicLock', deployer)
+      const PublicLock = await ethers.getContractFactory(
+        'contracts/PublicLock.sol:PublicLock',
+        deployer
+      )
       let publicLock = await PublicLock.attach(evt.args.newLockAddress)
 
-      const expirationBefore = await publicLock.keyExpirationTimestampFor(
-        recipient
-      )
-      assert(expirationBefore.eq(0))
+      const expirationBefore =
+        await publicLock.keyExpirationTimestampFor(recipient)
+      assert(expirationBefore == 0)
 
-      let purchaseTx = await publicLock.purchase(0, recipient, referrer, [])
+      let purchaseTx = await publicLock.purchase(
+        [],
+        recipient,
+        referrer,
+        ADDRESS_ZERO,
+        []
+      )
       await purchaseTx.wait()
 
-      const expirationAfter = await publicLock.keyExpirationTimestampFor(
-        recipient
-      )
+      const expirationAfter =
+        await publicLock.keyExpirationTimestampFor(recipient)
 
-      assert(expirationAfter.gt(0))
+      assert(expirationAfter > 0)
     })
   })
 })

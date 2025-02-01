@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import '@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol';
-import '@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol';
-import '@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol';
-
+import "./MixinErrors.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 /**
  * @title An implementation of the money related functions.
- * @author HardlyDifficult (unlock-protocol.com)
  */
-contract MixinFunds
-{
+contract MixinFunds is MixinErrors {
   using AddressUpgradeable for address payable;
   using SafeERC20Upgradeable for IERC20Upgradeable;
 
@@ -21,15 +19,18 @@ contract MixinFunds
    */
   address public tokenAddress;
 
-  function _initializeMixinFunds(
-    address _tokenAddress
-  ) internal
-  {
+  function _initializeMixinFunds(address _tokenAddress) internal {
+    _isValidToken(_tokenAddress);
     tokenAddress = _tokenAddress;
-    require(
-      _tokenAddress == address(0) || IERC20Upgradeable(_tokenAddress).totalSupply() > 0,
-      'INVALID_TOKEN'
-    );
+  }
+
+  function _isValidToken(address _tokenAddress) internal view {
+    if (
+      _tokenAddress != address(0) &&
+      IERC20Upgradeable(_tokenAddress).totalSupply() < 0
+    ) {
+      revert INVALID_TOKEN();
+    }
   }
 
   /**
@@ -41,10 +42,9 @@ contract MixinFunds
     address _tokenAddress,
     address payable _to,
     uint _amount
-  ) internal
-  {
-    if(_amount > 0) {
-      if(_tokenAddress == address(0)) {
+  ) internal {
+    if (_amount > 0) {
+      if (_tokenAddress == address(0)) {
         // https://diligence.consensys.net/blog/2019/09/stop-using-soliditys-transfer-now/
         _to.sendValue(_amount);
       } else {
@@ -53,4 +53,6 @@ contract MixinFunds
       }
     }
   }
+
+  uint256[1000] private __safe_upgrade_gap;
 }

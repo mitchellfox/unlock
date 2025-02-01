@@ -1,3 +1,6 @@
+// TODO: remove, some part related to old checkout (callToAction)
+
+import { vi, describe, beforeAll, expect, it } from 'vitest'
 import * as validators from '../../utils/checkoutValidators'
 
 describe('Form field validators', () => {
@@ -425,7 +428,7 @@ describe('Form field validators', () => {
         ).toBe(false)
       })
 
-      it('icon is not a valid url', () => {
+      it('icon is not a valid url but that does not throw', () => {
         expect.assertions(4)
 
         expect(
@@ -433,25 +436,25 @@ describe('Form field validators', () => {
             ...validConfig,
             icon: '"><script type="text/javascript>alert("XSS");</script><img src="http://example.com/img.jpg',
           })
-        ).toBe(false)
+        ).toBe(true)
         expect(
           validators.isValidPaywallConfig({
             ...validConfig,
             icon: 'notaURL',
           })
-        ).toBe(false)
+        ).toBe(true)
         expect(
           validators.isValidPaywallConfig({
             ...validConfig,
             icon: '/test.jpg',
           })
-        ).toBe(false)
+        ).toBe(true)
         expect(
           validators.isValidPaywallConfig({
             ...validConfig,
             icon: 'gerbils://eat.poo/fancy.jpg',
           })
-        ).toBe(false)
+        ).toBe(true)
       })
 
       it('locks is not an object', () => {

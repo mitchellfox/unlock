@@ -1,67 +1,29 @@
 import Web3Service from '../web3Service'
+import PublicLockVersions from '../PublicLock'
+import networks from '@unlock-protocol/networks'
+import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { chainId, setupTest, setupLock } from './helpers/integration'
+import nodeSetup from './setup/prepare-eth-node-for-unlock'
+import locks from './helpers/fixtures/locks'
+import { ethers } from 'ethers'
 
-import v4 from '../v4'
-import v6 from '../v6'
-import v7 from '../v7'
-import v8 from '../v8'
-import v9 from '../v9'
-
-const supportedVersions = [v4, v6, v7, v8, v9]
-
-const host = process.env.CI ? 'eth-node' : '127.0.0.1'
-const port = 8545
-const provider = `http://${host}:${port}`
-
-const networks = {
-  31337: {
-    provider,
-    unlockAddress: '0xc43efE2C7116CB94d563b5A9D68F260CCc44256F',
-  },
+var web3Service = new Web3Service(networks)
+const lock = {
+  address: '0xe6A85e67905d41A479A32FF59892861351c825E8',
+  network: 10,
 }
 
-let web3Service
-
-jest.mock('../erc20.js', () => {
-  return {
-    getErc20Decimals: jest.fn(() => Promise.resolve(18)),
-    getErc20BalanceForAddress: jest.fn(() => Promise.resolve('0x0')),
-  }
-})
-
 describe('Web3Service', () => {
-  beforeEach(() => {
-    web3Service = new Web3Service(networks)
-  })
-
-  describe('generateLockAddress', () => {
-    describe('_create2Address', () => {
-      it('should compute the correct address', async () => {
-        expect.assertions(1)
-        const unlockAddress = '0xBe6ed9A686D288f23C721697e828480E13d138F2'
-        const templateAddress = '0x842207a6a95A0455415db073352d18eB54C728a8'
-        const account = '0xAaAdEED4c0B861cB36f4cE006a9C90BA2E43fdc2'
-        const lockSalt = '1d24dcf6d1c86a947c0e9563'
-        expect(
-          web3Service._create2Address(
-            unlockAddress,
-            templateAddress,
-            account,
-            lockSalt
-          )
-        ).toEqual('0x1c3c3E32878905490eDDFa7c98C47E6EBb003541')
-      })
-    })
-  })
-
   describe('versions', () => {
     const versionSpecificLockMethods = ['getLock']
-
     it.each(versionSpecificLockMethods)(
       'should invoke the implementation of the corresponding version of %s',
       async (method) => {
         expect.assertions(3)
-        const args = ['0xlock', 31337]
-        const result = {}
+        const args = [lock.address, lock.network]
+        const result = {
+          unlockContractAddress: networks[lock.network].unlockAddress,
+        }
         const version = {
           [method](_args) {
             // Needs to be a function because it is bound to web3Service
@@ -70,20 +32,60 @@ describe('Web3Service', () => {
             return result
           },
         }
-        web3Service.lockContractAbiVersion = jest.fn(() => version)
+        web3Service.getUnlockContract = vi.fn(() => ({
+          locks: vi.fn(() => ({ deployed: true })),
+        }))
+        web3Service.lockContractAbiVersion = vi.fn(() => version)
         const r = await web3Service[method](...args)
         expect(r).toBe(result)
       }
     )
 
     // for each supported version, let's make sure it implements all methods
-    it.each(supportedVersions)(
+    it.each(Object.keys(PublicLockVersions))(
       'should implement all the required methods',
-      (version) => {
+      (versionNumber) => {
         expect.assertions(1)
+        const version = PublicLockVersions[versionNumber]
         versionSpecificLockMethods.forEach((method) => {
           expect(version[method]).toBeInstanceOf(Function)
         })
+      }
+    )
+  })
+
+  describe('Lock validation', () => {
+    it.each(Object.keys(PublicLockVersions))(
+      'getLock validation on public lock %s',
+      async () => {
+        expect.assertions(2)
+        const service = new Web3Service(networks)
+        service.getUnlockContract = vi.fn(() => ({
+          locks: vi.fn(() => ({ deployed: true })),
+        }))
+        // Fake implementation of getLock
+        const version = {
+          getLock: (_args) => {
+            return {
+              unlockContractAddress: networks[lock.network].unlockAddress,
+            }
+          },
+        }
+        service.lockContractAbiVersion = vi.fn(() => version)
+
+        const response = await service.getLock(lock.address, 10)
+        expect(response.address).toBe(lock.address)
+        const notFromUnlockFactoryContract = async () => {
+          service.getUnlockContract = vi.fn(() => ({
+            locks: vi.fn(() => ({ deployed: false })),
+          }))
+          const response = await service.getLock(
+            '0xAfC5356c67853fC8045586722fE6a253023039eB',
+            10
+          )
+          return response
+        }
+        await expect(notFromUnlockFactoryContract).rejects.toThrow()
       }
     )
   })

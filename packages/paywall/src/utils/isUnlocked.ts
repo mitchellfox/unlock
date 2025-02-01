@@ -1,8 +1,6 @@
-import { PaywallConfig, NetworkConfigs } from '@unlock-protocol/types'
-
-import { keyExpirationTimestampFor } from './keyExpirationTimestampFor'
-import { optimisticUnlocking } from './optimisticUnlocking'
-import { locksmithUri } from '../urls'
+import { NetworkConfigs } from '@unlock-protocol/types'
+import { hasValidKey } from './hasValidKey'
+import { PaywallConfigType } from '@unlock-protocol/core'
 
 /**
  * A function which, given a user account, a paywall config will return the list of unlocked locks.
@@ -11,34 +9,33 @@ import { locksmithUri } from '../urls'
  */
 export const isUnlocked = async (
   userAccountAddress: string,
-  paywallConfig: PaywallConfig,
+  paywallConfig: PaywallConfigType,
   networks: NetworkConfigs
 ): Promise<string[]> => {
   const unlockedLocks: string[] = []
+  if (!paywallConfig?.locks) {
+    return []
+  }
   await Promise.all(
     // For each lock
     Object.entries(paywallConfig.locks).map(async ([lockAddress]) => {
       const network =
         paywallConfig.locks[lockAddress].network || paywallConfig.network
-      const { provider } = networks[network]
-      const timestamp = await keyExpirationTimestampFor(
-        provider,
-        lockAddress,
-        userAccountAddress!
-      )
-      if (timestamp > new Date().getTime() / 1000) {
-        // This lock is unlocked!
-        unlockedLocks.push(lockAddress)
-      } else if (!paywallConfig.pessimistic) {
-        const optimistic = await optimisticUnlocking(
+      if (network && networks[network]) {
+        const { provider } = networks[network]
+        const isValidMember = await hasValidKey(
           provider,
-          locksmithUri,
-          [lockAddress],
+          lockAddress,
           userAccountAddress!
         )
-        if (optimistic) {
+        if (isValidMember) {
+          // This lock is unlocked!
           unlockedLocks.push(lockAddress)
         }
+      } else {
+        console.error(
+          `Missing network configuration for lock ${lockAddress} in paywall config`
+        )
       }
     })
   )

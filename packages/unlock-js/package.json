@@ -1,55 +1,59 @@
 {
   "name": "@unlock-protocol/unlock-js",
-  "version": "0.20.4",
+  "version": "0.51.0",
   "description": "This module provides libraries to include Unlock APIs inside a Javascript application.",
-  "main": "lib/index.js",
-  "module": "esm/index.js",
-  "types": "index.d.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/unlock-protocol/unlock.git"
+    "url": "https://github.com/unlock-protocol/unlock.git",
+    "directory": "packages/unlock-js"
   },
   "scripts": {
-    "prepare-eth": "node ./src/__tests__/setup/prepare-eth-node-for-unlock.js",
-    "test": "yarn build && yarn prepare-eth && jest",
-    "lint": "yarn run eslint --resolve-plugins-relative-to ../eslint-config --ext .tsx,.ts,.js src/",
-    "build-esm": "BABEL_ENV=esm npx babel src --ignore src/__tests__ --out-dir esm",
-    "build-cjs": "BABEL_ENV=cjs npx babel src --ignore src/__tests__ --out-dir lib",
+    "test": "yarn clean && yarn build:abis && yarn build:lib && vitest",
+    "test:single": "cd src/__tests__/integration && cp single.js single.test.js && yarn vitest single",
+    "check": "tsc --noEmit",
+    "lint": "eslint",
+    "build:lib": "tsup src/index.ts --dts --format esm,cjs ",
     "build:abis": "node ./scripts/compressAbi.js",
-    "build": "yarn clean && yarn build:abis && yarn build-cjs && yarn build-esm",
-    "clean": "rm -rf lib/ && rm -rf esm/",
-    "ci": "yarn test && yarn lint",
+    "build": "yarn clean && yarn generate && yarn build:abis && yarn build:lib",
+    "clean": "rm -rf lib esm cache coverage src/__tests__/contracts src/__tests__/artifacts",
+    "ci": "yarn test && yarn lint && yarn build",
     "prepublishOnly": "yarn build",
-    "ganache": "ganache-cli --mnemonic \"hello unlock save the web\" -b 1"
+    "grant-keys": "node ./scripts/grant-keys.js",
+    "generate:locksmith": "openapi-generator-cli generate -i ./openapi.yml -g typescript-axios -c ./openapi.ts.config.json -o ./src/@generated/client",
+    "generate:subgraph": "yarn graphql-codegen",
+    "generate": "yarn generate:locksmith && yarn generate:subgraph"
   },
   "author": "Unlock Inc",
   "license": "MIT",
   "peerDependencies": {
-    "ethers": "5.5.1"
-  },
-  "lint-staged": {
-    "*.{js,ts}": [
-      "eslint --fix"
-    ]
+    "axios": "1.7.9",
+    "ethers": "^6.13.0"
   },
   "devDependencies": {
-    "@babel/cli": "7.16.0",
-    "@babel/core": "7.16.0",
-    "@babel/preset-env": "7.16.0",
+    "@graphql-codegen/cli": "5.0.3",
+    "@graphql-codegen/typescript": "4.1.2",
+    "@graphql-codegen/typescript-graphql-request": "6.2.0",
+    "@graphql-codegen/typescript-operations": "4.4.0",
+    "@nomicfoundation/hardhat-ethers": "3.0.8",
+    "@openapitools/openapi-generator-cli": "2.15.3",
     "@unlock-protocol/contracts": "workspace:./packages/contracts",
     "@unlock-protocol/eslint-config": "workspace:./packages/eslint-config",
+    "@unlock-protocol/networks": "workspace:./packages/networks",
     "@unlock-protocol/types": "workspace:./packages/types",
-    "babel-jest": "27.3.1",
-    "eslint": "8.1.0",
-    "ethers": "5.5.1",
-    "jest": "27.3.1",
-    "lint-staged": "11.2.6",
-    "prettier": "2.4.1",
-    "ts-jest": "27.0.7",
-    "typescript": "4.4.4"
+    "eslint": "9.17.0",
+    "ethers": "6.13.4",
+    "hardhat": "2.22.17",
+    "prettier": "3.4.2",
+    "tsup": "8.3.5",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
   },
   "dependencies": {
-    "@unlock-protocol/jest-config": "workspace:^",
-    "@unlock-protocol/networks": "workspace:./packages/networks"
+    "graphql": "16.10.0",
+    "graphql-request": "6.1.0",
+    "siwe": "2.3.2"
   }
 }

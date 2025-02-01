@@ -1,7 +1,7 @@
 {
   "name": "unlock-express-example",
   "version": "1.0.0",
-  "description": "Exmaple of Express application that uses Unlock!",
+  "description": "Example of Express application that uses Unlock!",
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,7 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "@unlock-protocol/unlock-express": "workspace:^",
-    "cookie-parser": "1.4.5",
-    "express": "4.17.1"
+    "express": "4.21.2",
+    "express-session": "1.18.1",
+    "passport": "0.7.0"
   }
 }

@@ -1,4 +1,6 @@
+<!--
 Thank you for your contribution to Unlock Protocol!
+-->
 
 # Description
 
@@ -33,4 +35,3 @@ PS: [Read how to write the perfect pull request](https://blog.github.com/2015-01
 If relevant, please write a summary of your change that will be suitable for inclusion in the Release Notes for the next Unlock release.
 
 -->
-

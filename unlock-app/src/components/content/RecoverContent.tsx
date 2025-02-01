@@ -1,18 +1,16 @@
-import React, { useState, useEffect, useContext } from 'react'
-import Head from 'next/head'
-import Link from 'next/link'
-import Layout from '../interface/Layout'
-import { pageTitle } from '../../constants'
-import { Heading, Instructions, Label } from '../interface/FinishSignup'
+'use client'
+
+import { useState, useEffect } from 'react'
 import { SetPassword } from '../interface/SetPassword'
 import Loading from '../interface/Loading'
-import { StorageService } from '../../services/storageService'
 import { reEncryptPrivateKey } from '../../utils/accounts'
-import { ConfigContext } from '../../utils/withConfig'
 import UnlockProvider from '../../services/unlockProvider'
-import ProviderContext from '../../contexts/ProviderContext'
 
-import {} from '../interface/Authenticate'
+import { Badge } from '@unlock-protocol/ui'
+import { locksmith } from '~/config/locksmith'
+import { useSearchParams } from 'next/navigation'
+import { config } from '~/config/app'
+import Link from 'next/link'
 
 interface RestoreAccountProps {
   config: any
@@ -25,22 +23,19 @@ export const RestoreAccount = ({
   config,
   email,
   recoveryKey,
-  network,
 }: RestoreAccountProps) => {
-  const { setProvider, provider } = useContext(ProviderContext)
+  const [provider, setProvider] = useState<any>(null) // Not ACTUALLY using the provider because the goal here is just to change the password, not to connect the user.
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [recoveryPhrase, setRecoveryPhrase] = useState('')
   const [success, setSuccess] = useState(false)
 
-  const storageService = new StorageService(config.services.storage.host)
   useEffect(() => {
     setLoading(true)
     const getRecoveryPhrase = async () => {
       if (email) {
-        const { recoveryPhrase } = await storageService.getUserRecoveryPhrase(
-          email
-        )
+        const result = await locksmith.getUserRecoveryPhrase(email)
+        const { recoveryPhrase } = result.data
         if (!recoveryPhrase) {
           setError('We do not have a valid recovery phrase for your user')
           setLoading(false)
@@ -49,7 +44,7 @@ export const RestoreAccount = ({
 
           // We need to log the user in from the recoveryPhrase + recoveryKey!
           // TODO: what network do we pick???
-          const unlockProvider = new UnlockProvider(config.networks[network])
+          const unlockProvider = new UnlockProvider(config.networks[1])
           try {
             await unlockProvider.connect({
               key: recoveryKey,
@@ -68,7 +63,8 @@ export const RestoreAccount = ({
       }
     }
     getRecoveryPhrase()
-  }, [email])
+  }, [email, recoveryKey])
+
   const resetPassword = async (newPassword: string) => {
     setLoading(true)
     const passwordEncryptedPrivateKey = await reEncryptPrivateKey(
@@ -77,21 +73,21 @@ export const RestoreAccount = ({
       newPassword
     )
     try {
-      const { data, signature } = provider.signUserData({
+      const { data, signature } = await provider.signUserData({
         passwordEncryptedPrivateKey,
       })
-      await storageService.updateUserEncryptedPrivateKey(email, data, signature)
+      await locksmith.updateUserEncryptedPrivateKey(email, data, signature)
       setSuccess(true)
       // TODO: send email for confirmation
       // TODO: create new recovery key
-    } catch (error) {
+    } catch (error: any) {
       setError('There was an error resettings your password. Please try again.')
       console.error(error)
     }
     setLoading(false)
   }
 
-  if (loading) {
+  if (loading || !recoveryKey) {
     return <Loading />
   }
 
@@ -101,91 +97,73 @@ export const RestoreAccount = ({
 
   if (success) {
     return (
-      <div>
-        <Heading>Recover your Unlock Account</Heading>
-        <Instructions>
-          Your password was successfuly changed. Visit{' '}
-          <Link href="/settings">
-            <a>your settings page</a>
+      <div className="flex flex-col w-2/3 mx-auto gap-2">
+        <h1 className="text-4xl font-bold">Recover your Unlock Account</h1>
+        <p className="">
+          Your password was successfuly changed. However, your account needs to{' '}
+          <Link
+            className="text-brand-ui-primary underline"
+            href="/migrate-user"
+          >
+            be migrated
           </Link>
           .
-        </Instructions>
+        </p>
       </div>
     )
   }
   return (
     <>
-      <div>
-        <Heading>Recover your Unlock Account</Heading>
-        <Instructions>
-          Please, set a new password for your account.
-        </Instructions>
-        <Label htmlFor="emailPlaceholder">Email</Label>
-        <p>{email}</p>
-      </div>
+      <div className="flex flex-col w-2/3 mx-auto gap-2">
+        <h1 className="text-4xl font-bold">Recover your Unlock Account</h1>
+        <p className="">Please, set a new password for your account.</p>
+        <div className="flex gap-2 mt-2 mb-3">
+          <Badge>{email}</Badge>
+        </div>
 
-      <SetPassword
-        loading={loading}
-        buttonLabel="Resetting password"
-        onSubmit={resetPassword}
-      />
+        <SetPassword
+          loading={loading}
+          buttonLabel="Resetting password"
+          onSubmit={resetPassword}
+        />
+      </div>
     </>
   )
 }
 
-interface RecoverContentProps {
-  query: any
-}
+export const RecoverContent = () => {
+  const searchParams = useSearchParams()
 
-export const RecoverContent = ({ query }: RecoverContentProps) => {
-  const config = useContext(ConfigContext)
-
-  if (!query?.email || !query?.recoveryKey) {
-    return <Loading />
-  }
-
-  const { email } = query
-
+  const email = searchParams.get('email')
   let recoveryKey
+
   try {
-    recoveryKey = JSON.parse(
-      Array.isArray(query.recoveryKey)
-        ? query.recoveryKey[0]
-        : query.recoveryKey
-    )
+    const recoveryKeyParam = searchParams.get('recoveryKey')
+    if (recoveryKeyParam) {
+      recoveryKey = JSON.parse(recoveryKeyParam)
+    }
   } catch (error) {
     console.error('We could not parse the recovery key')
   }
 
-  let content
-  const defaultNetwork = 1 // This is no-op for recoveries (we do not query the chain)
-
   if (!email || !recoveryKey) {
-    content = (
+    return (
       <div>
-        <Heading>Recover your Unlock Account</Heading>
-        <Instructions>
+        <h1 className="text-4xl font-bold">Recover your Unlock Account</h1>
+        <span className="text-sm font-thin">
           Your recovery link is not valid. Please try again.
-        </Instructions>
+        </span>
       </div>
     )
-  } else {
-    content = (
-      <RestoreAccount
-        network={defaultNetwork} // Default to mainnet
-        config={config}
-        email={email}
-        recoveryKey={recoveryKey}
-      />
-    )
   }
+
   return (
-    <Layout title="Acccount Recovery">
-      <Head>
-        <title>{pageTitle('Account Recovery')}</title>
-      </Head>
-      {content}
-    </Layout>
+    <RestoreAccount
+      network={1} // Default to mainnet
+      config={config}
+      email={email.replace(' ', '+')}
+      recoveryKey={recoveryKey}
+    />
   )
 }
 export default RecoverContent

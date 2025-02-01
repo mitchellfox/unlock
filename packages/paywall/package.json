@@ -1,42 +1,48 @@
 {
   "name": "@unlock-protocol/paywall",
-  "version": "0.1.0",
-  "module": "src/index.ts",
-  "main": "dist/unlock.latest.min.js",
+  "version": "0.8.0",
+  "main": "./dist/unlock.latest.umd.js",
+  "module": "./dist/unlock.latest.es.js",
+  "typings": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/unlock.latest.es.js",
+      "require": "./dist/unlock.latest.umd.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unlock-protocol/unlock.git",
+    "directory": "packages/paywall"
+  },
   "scripts": {
     "build:tsc": "tsc",
-    "build": "webpack --mode=production --config webpack.config.js",
-    "lint": "eslint --resolve-plugins-relative-to ../eslint-config --ext .tsx,.ts,.js src/",
-    "test": "UNLOCK_ENV=test jest --env=jsdom",
+    "build": "vite build && tsup ./src/index.ts --dts-only",
+    "lint": "eslint",
+    "test": "NODE_ENV=test vitest run --coverage",
     "clean": "rm -rf build dist coverage",
-    "ci": "yarn test"
+    "ci": "yarn test && yarn build"
   },
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "devDependencies": {
-    "@types/jest": "27.0.2",
-    "@types/postmate": "1.5.2",
+    "@types/postmate": "1.5.4",
     "@unlock-protocol/eslint-config": "workspace:./packages/eslint-config",
-    "babel-jest": "27.3.1",
-    "css-loader": "6.5.0",
-    "dotenv": "10.0.0",
-    "eslint": "8.1.0",
-    "jest": "27.3.1",
-    "jest-fetch-mock": "3.0.3",
-    "node-fetch": "3.0.0",
-    "style-loader": "3.3.1",
-    "ts-jest": "27.0.7",
-    "ts-loader": "9.2.6",
-    "typescript": "4.4.4",
-    "webpack": "5.61.0",
-    "webpack-cli": "4.9.1"
+    "@unlock-protocol/networks": "workspace:^",
+    "@unlock-protocol/tsconfig": "workspace:^",
+    "@unlock-protocol/types": "workspace:^",
+    "eslint": "9.17.0",
+    "tsup": "8.3.5",
+    "typescript": "5.7.2",
+    "vite": "6.0.9",
+    "vite-plugin-css-injected-by-js": "3.5.2",
+    "vite-plugin-node-polyfills": "0.22.0",
+    "vitest": "2.1.8",
+    "vitest-fetch-mock": "0.4.3"
   },
   "dependencies": {
-    "@unlock-protocol/jest-config": "workspace:^",
-    "@unlock-protocol/networks": "workspace:./packages/networks",
-    "@unlock-protocol/tsconfig": "workspace:./packages/tsconfig",
-    "@unlock-protocol/types": "workspace:./packages/types",
-    "babel-plugin-require-context-hook": "1.0.0",
-    "babel-plugin-styled-components": "1.13.3",
     "postmate": "1.5.2"
   }
 }

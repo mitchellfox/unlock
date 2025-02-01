@@ -4,13 +4,14 @@ pragma solidity ^0.8.0;
 // This contract mostly follows the pattern established by openzeppelin in
 // openzeppelin/contracts-ethereum-package/contracts/access/roles
 
-import '@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol';
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "./MixinErrors.sol";
+import "../interfaces/hooks/ILockHasRoleHook.sol";
 
-contract MixinRoles is AccessControlUpgradeable {
-
+contract MixinRoles is AccessControlUpgradeable, MixinErrors {
   // roles
-  bytes32 public constant LOCK_MANAGER_ROLE = keccak256("LOCK_MANAGER");
-  bytes32 public constant KEY_GRANTER_ROLE = keccak256("KEY_GRANTER");
+  bytes32 internal constant LOCK_MANAGER_ROLE = keccak256("LOCK_MANAGER");
+  bytes32 internal constant KEY_GRANTER_ROLE = keccak256("KEY_GRANTER");
 
   // events
   event LockManagerAdded(address indexed account);
@@ -18,9 +19,11 @@ contract MixinRoles is AccessControlUpgradeable {
   event KeyGranterAdded(address indexed account);
   event KeyGranterRemoved(address indexed account);
 
+  // one more hook (added to v15)
+  ILockHasRoleHook public onHasRoleHook;
+
   // initializer
   function _initializeMixinRoles(address sender) internal {
-
     // for admin mamangers to add other lock admins
     _setRoleAdmin(LOCK_MANAGER_ROLE, LOCK_MANAGER_ROLE);
 
@@ -28,53 +31,41 @@ contract MixinRoles is AccessControlUpgradeable {
     _setRoleAdmin(KEY_GRANTER_ROLE, LOCK_MANAGER_ROLE);
 
     if (!isLockManager(sender)) {
-      _setupRole(LOCK_MANAGER_ROLE, sender);  
+      _setupRole(LOCK_MANAGER_ROLE, sender);
     }
-    if (!isKeyGranter(sender)) {
+    if (!hasRole(KEY_GRANTER_ROLE, sender)) {
       _setupRole(KEY_GRANTER_ROLE, sender);
     }
   }
 
+  function hasRole(
+    bytes32 role,
+    address account
+  ) public view override returns (bool) {
+    bool nativeRole = super.hasRole(role, account);
+    if (address(onHasRoleHook) != address(0)) {
+      return onHasRoleHook.hasRole(role, account, nativeRole);
+    }
+    return nativeRole;
+  }
+
   // modifiers
-  modifier onlyLockManager() {
-    require( hasRole(LOCK_MANAGER_ROLE, msg.sender), 'MixinRoles: caller does not have the LockManager role');
-    _;
+  function _onlyLockManager() internal view {
+    if (!hasRole(LOCK_MANAGER_ROLE, msg.sender)) {
+      revert ONLY_LOCK_MANAGER();
+    }
   }
-
-  modifier onlyKeyGranterOrManager() {
-    require(isKeyGranter(msg.sender) || isLockManager(msg.sender), 'MixinRoles: caller does not have the KeyGranter or LockManager role');
-    _;
-  }
-
 
   // lock manager functions
   function isLockManager(address account) public view returns (bool) {
     return hasRole(LOCK_MANAGER_ROLE, account);
   }
 
-  function addLockManager(address account) public onlyLockManager {
-    grantRole(LOCK_MANAGER_ROLE, account);
-    emit LockManagerAdded(account);
-  }
-
+  // kept for backward compat with Unlock prior v14
   function renounceLockManager() public {
     renounceRole(LOCK_MANAGER_ROLE, msg.sender);
-    emit LockManagerRemoved(msg.sender);
   }
 
-
-  // key granter functions
-  function isKeyGranter(address account) public view returns (bool) {
-    return hasRole(KEY_GRANTER_ROLE, account);
-  }
-
-  function addKeyGranter(address account) public onlyLockManager {
-    grantRole(KEY_GRANTER_ROLE, account);
-    emit KeyGranterAdded(account);
-  }
-
-  function revokeKeyGranter(address _granter) public onlyLockManager {
-    revokeRole(KEY_GRANTER_ROLE, _granter);
-    emit KeyGranterRemoved(_granter);
-  }
+  // added -1 slot for the onRoleHook address in v15
+  uint256[999] private __safe_upgrade_gap;
 }

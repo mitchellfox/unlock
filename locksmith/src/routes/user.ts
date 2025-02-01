@@ -1,8 +1,9 @@
 import express from 'express'
 import signatureValidationMiddleware from '../middlewares/signatureValidationMiddleware'
+import userController from '../controllers/userController'
+import { SignedRequest } from '../types'
 
-const router = express.Router({ mergeParams: true })
-const userController = require('../controllers/userController')
+const router: express.Router = express.Router({ mergeParams: true })
 
 const passwordEncryptedPrivateKeyPathRegex = new RegExp(
   '^/users/S+/passwordEncryptedPrivateKey/?$',
@@ -42,7 +43,7 @@ router.put(
 router.get(
   cardsPathRegex,
   signatureValidationMiddleware.generateSignatureEvaluator({
-    name: 'user',
+    name: 'Get Card',
     required: ['publicKey'],
     signee: 'publicKey',
   })
@@ -51,7 +52,7 @@ router.get(
 router.delete(
   cardsPathRegex,
   signatureValidationMiddleware.generateSignatureEvaluator({
-    name: 'user',
+    name: 'Delete Card',
     required: ['publicKey'],
     signee: 'publicKey',
   })
@@ -60,8 +61,8 @@ router.delete(
 router.put(
   cardsPathRegex,
   signatureValidationMiddleware.generateProcessor({
-    name: 'user',
-    required: ['publicKey'],
+    name: 'Save Card',
+    required: ['publicKey', 'stripeTokenId'],
     signee: 'publicKey',
   })
 )
@@ -71,14 +72,16 @@ router.get(
   '/:emailAddress/privatekey',
   userController.retrieveEncryptedPrivatekey
 )
+
 router.get(
   '/:emailAddress/recoveryphrase',
   userController.retrieveRecoveryPhrase
 )
 
-router.get(
-  '/:ethereumAddress/credit-cards',
-  userController.getAddressPaymentDetails
+router.get('/:emailAddress', userController.exist)
+
+router.get(cardsPathRegex, (req, res) =>
+  userController.getAddressPaymentDetails(req as unknown as SignedRequest, res)
 )
 // Deprecated: we are now using ethereumAddress to store credit cards
 router.get('/:emailAddress/cards', userController.cards)
@@ -89,14 +92,11 @@ router.put(
   userController.updatePasswordEncryptedPrivateKey
 )
 router.post('/:ethereumAddress/eject', userController.eject)
-router.put(
-  '/:ethereumAddress/credit-cards',
-  userController.updateAddressPaymentDetails
-)
+router.put(cardsPathRegex, userController.updateAddressPaymentDetails)
 router.delete(
   '/:ethereumAddress/credit-cards',
   userController.deleteAddressPaymentDetails
 )
 // Deprecated
 router.put('/:emailAddress/paymentdetails', userController.updatePaymentDetails)
-module.exports = router
+export default router

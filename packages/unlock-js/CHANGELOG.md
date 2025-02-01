@@ -1,24 +1,465 @@
 # Changes
 
+# 0.51.0
+
+- Changed GraphService constructor to accept params
+
+# 0.50.1
+
+- added `creationTransactionHash` to `Lock`
+
+# 0.50.0
+
+- added support for `PublicLock` v15 and `Unlock` v14
+- added support for tx building in `web3Service` by using `web3Service.purchaseKey` and `web3Service.purchaseKeys` that will return a set of raw transactions without executing them
+
+# 0.49.2
+
+- adding `setMerkleRoot` to WalletService
+
+## 0.49.1
+
+- Returning onKeyPurchaseHook when using `getLock`.
+
+## 0.49.0
+
+- Remove support for deprecated versions of `Unlock` (prior to v10)
+- Remove support for deprecated versions of `PublicLock` (prior to v7)
+
+# 0.48.0
+
+- update `peerDependencies` to require `ethers` v6.
+
+# 0.47.0
+
+- using `purchasePriceFor` when possible in `getPurchaseKeysArguments`
+
+# 0.45.0
+
+- adding support for a password hook with caps and multiple passwords per lock
+
+# 0.44.0
+
+- adding the possibility to pass a custom url endpoint to the `SubgraphService` constructor.
+
+# 0.43.2
+
+- using `totalKeys` when possible (lock v11 and further)
+
+# 0.43.1
+
+- adding the ability to add a filter for approval when listing keys.
+
+# 0.43.0
+
+- allowing `maxNumberOfKeys` to be 0 when deploying locks.
+
+# 0.42.0
+
+- added support for `UnlockV13` and `PublicLockV14`
+
+# 0.41.0
+
+- adding `setDiscountCodeWithCapHookSigner`
+
+# 0.40.2
+
+- claim now supports a `referrer` param
+
+# 0.40.1
+
+- adding missing ABI for locksmiths
+
+# 0.40.0
+
+- adding `latestTokenOfOwner`
+
+# 0.39.4
+
+- add `referrerFees` to `lock` in subgraphs
+
+# 0.39.3
+
+- handling cases where `supply` is larger than `maxNumberOfKeys` when calling `updateLockConfig`.
+
+# 0.39.2
+
+- add `createLock` accepts keyPrice as number
+- `maxNumberOfKeys` is optional when creating a lock. If not passed will use unlimited.
+
+# 0.39.1
+
+- add `getDiscountHookValues` to web3Service
+- add `setDiscountCodeHookSigner` to walletService
+
+# 0.39.0
+
+- Add support for setGasRefundValue to walletService and getGasRefundValue to web3Service
+
+# 0.38.2
+
+- Add `getTokenIdFromTx` method to retrieve the tokenId from a transaction hash
+
+# 0.38.1
+
+- Add `transferFrom` to walletService
+
+# 0.38.0
+
+- Add support for swap and purchase in key extension
+
+# 0.37.2
+
+- USDC on Polygon does not have a version function
+
+# 0.37.1
+
+- fixing swap and purchase
+
+# 0.37.0
+
+- adding support for actual purchase through CardPurchaser
+
+# 0.36.1
+
+- fix decimals for withdrawFromLock
+
+# 0.36.0
+
+- adding support functions for Transfer With Authorization
+- adding support for CardPurchaser contract
+
+# 0.35.5
+
+- Removed signDataPersonal
+
+# 0.35.4
+
+- Adding missing implementations for v13: addKeyGranter, isKeyGranter
+
+# 0.35.3
+
+- Expose more fields such as `symbol`, `maxKeysPerAddress` and `maxNumberOfKeys` in subgraph service for locks fields.
+
+# 0.35.1
+
+- fixed upgrade function
+
+# 0.35.0
+
+- Add support for `swap` param in `purchaseKey` and `purchaseKeys` for swap and pay.
+- add support for Unlock v12
+
+# 0.34.1
+
+- add support for `setKeyManagerOf` to walletService
+
+# 0.33.4
+
+- move `customHookService` to web3Service
+- add `getPasswordHookSigners` to web3Service
+- move `setPasswordHookSigner` to walletService
+
+# 0.33.4
+
+- add `customHookService`
+
+# 0.33.3
+
+- remove `getEthAddressType` to web3Service
+- remove `isValidEOA` to web3Service
+- refactor `resolveName`
+
+# 0.33.2
+
+- add `getEthAddressType` to web3Service
+- add `isValidEOA` to web3Service
+- add `resolveName` to web3Service
+
+# 0.33.1
+
+- ensuring we return a contract or throw!
+
+# 0.33.1
+
+- Move to ethers.JsonRpcBatchProvider instead of ethers.JsonRpcProvider
+
+# 0.33.0
+
+- Remove subgraph service
+
+# 0.32.18
+
+- Add KeyManager for interacting with key manager contracts.
+
+# 0.32.17
+
+- Add getBaseTokenURI to web3Service
+
+# 0.32.15
+
+- Add ability to pass recurring payment and total approval to extend key
+
+# 0.32.13
+
+- Export utility types for subgraph service
+
+# 0.32.11
+
+- add `updateTransferFee` in walletService
+
+# 0.32.10
+
+- add `referrerFees` in web3Service
+- add `setReferrerFee` in walletService
+
+# 0.32.9
+
+- add `publicLockLatestVersion` in web3Service
+- add `upgradeLock` in walletService
+
+# 0.32.8
+
+- fix `updateRefundPenalty` and `renounceLockManager` in walletService
+
+# 0.32.7
+
+- add `setEventHooks` in walletService
+- add `onKeyCancelHook` in web3Service
+- add `onKeyPurchaseHook` in web3Service
+- add `onKeyTransferHook` in web3Service
+- add `onKeyTokenURIHook` in web3Service
+- add `onValidKeyHook` in web3Service
+- add `onKeyExtendHook` in web3Service
+- add `onKeyGrantHook` in web3Service
+
+# 0.32.6
+
+- increased robustness by checking address format on events
+
+# 0.32.5
+
+- add `updateRefundPenalty` in walletService
+- add `freeTrialLength` in web3Service
+- add `refundPenaltyBasisPoints` in web3Service
+
+# 0.32.4
+
+- Using `transactionOptions` for `createLock`
+
+# 0.32.3
+
+- Pass network property on locks and keys returned from subgraph.
+
+# 0.32.1
+
+- Change parameter name for `updateLockSymbol`
+
+# 0.32.0
+
+Allow passing creator in the createLock method and improve typing.
+
+# 0.31.6
+
+- add `addLockManager` in walletService
+- add `renounceLockManager` in walletService
+
+# 0.31.5
+
+- Added suppport for `runEstimate`
+
+# 0.31.4
+
+- Add check to ensure lock is deployed from unlock factory contract in getLock method
+
+# 0.31.2
+
+- Add uniswap service
+- Add consultUniswap method to web3 service for getting price of a token using uniswap v3 pools
+
+# 0.31.1
+
+- add `totalKeys` to subgraph
+- support tokenAddress in `getAddressBalance`
+
+# 0.31.0
+
+- Add support for PublicLock version 12
+
+# 0.30.6
+
+- Add support for `key` and `lock` function in subgraph service.
+
+# 0.30.5
+
+- Add purchasePriceFor in web3Service
+
+# 0.30.4
+
+- Add support for `updateLockName`, `updateLockSymbol` and `setBaseTokenURI` across versions
+
+# 0.30.3
+
+- When no version is supplied, deploy the latest version of template.
+
+# 0.30.2
+
+- Add totalApproval option in purchase method
+
+# 0.30.1
+
+- Add `address` to schema.graphql
+
+# 0.30.0
+
+- Add subgraph service
+
+# 0.29.3
+
+- Breaking change in the locksmith service configuration export
+
+# 0.28.3
+
+- Add support for locksmith service.
+
+# 0.28.2
+
+- add support for `transferFeeBasisPoints`
+- move `getCancelAndRefundValueFor` from `walletService` -> `web3Service`
+
+# 0.28.1
+
+- Preserving gas calculation when previous configured on purchase
+
+# 0.27.0
+
+- adding support for TransactionOptions when sending transactions. Also introducing the ability to use `runEstimate` to check if a transaction succeeds and how much gas it consumes
+
+# 0.26.10
+
+- add `keyPrice` parameter for `updateKeyPrice` and fix type definitions
+
+# 0.26.9
+
+- add support for `totalSupply`
+
+# 0.26.8
+
+- add support for `renewMembershipFor`
+
+# 0.26.7
+
+- add support for `keysAvailable`
+
+# 0.26.6
+
+- add support for `tokenURI`
+
+# 0.26.5
+
+- add support for `publicLockVersion`
+
+# 0.26.4
+
+- add support for `totalKeys`
+
+# 0.26.3
+
+- Add typing for referer in purchase key methods
+
+# 0.26.2
+
+- add support for `numberOfOwners`
+
+# 0.26.1
+
+- Fixed bug in allowance function
+
+# 0.26.0
+
+- add support for `approveBeneficiary`
+- pass address as param to `getAllowance` instead of signer
+
+# 0.25.0
+
+- Better support for v10
+
+# 0.24.0
+
+- Removed hard coded gas limit and waits on erc20 approvals
+- Add locksmithService for interacting with locksmith servers.
+- Rescuing gas estimation errors
+- Add support for granting multiple keys
+
+# 0.23.1
+
+- add support for publicLock v10
+- add ability for all versions to purchase multiple keys at once with `purchaseKeys`
+- add support for `extendKey`, `setMaxKeysPerAddress`, `mergeKeys`
+- refactor functions us emultiple times in `./src/PublicLock/utils` folder
+
+# 0.23.0
+
+- add Unlock v11 and ability to create lock at specific version
+- Non expired keys are represented as -1
+- Gas price calculation fixes
+- Adding support for unlimited durations when granting keys
+- Adding transactionOptions on the grantKeys function
+
+# 0.22.2
+
+- Add support for setExpirationDuration
+
+# 0.21.2
+
+- Better support for locks with infinite duration
+
+# 0.21.1
+
+- Fixed dependencies in package.json
+
+# 0.21.0
+
+- Updated docs
+- Updated dependencies
+- Add setMaxNumberOfKeys support
+- add support for publicLock v9
+- add new Unlock v10 upgradeable logic
+
+# 0.20.6
+
+- Bumped gas limit to be 40% higher than estimate
+
+# 0.20.5
+
+- remove `deployUnlock`, `configureUnlock` and `deployTemplate` from walletService
+
 # 0.20.4
+
 - @unlock-protocol/networks is a dev dependency
 
 # 0.20.3
+
 - Adding forced estimate for gas which includes gas price because it matters for execution
 
 # 0.20.2
+
 - Adding forced estimate for gas
 
 # 0.20.0
+
 - removed metadata functions (breaking change)
 
 # 0.19.3
+
 - Removed hard coded gas amounts when applicable
 
 # 0.19.2
+
 - Updated API calls to locksmith to add chain
 
 # 0.19.1
+
 - removed erc1820 to remove scrypt so we ccan support newer node versions
 
 # 0.19.0
@@ -27,6 +468,7 @@
 - better inheritance pattern
 - removed dev dependencies
 - Removed limitation in node version
+
 # 0.18.2
 
 - Adding way to get the contract in web3Service (`lockContract(lockAddress, network)`)
@@ -35,6 +477,7 @@
 # 0.18.1
 
 Fixed grantKey when timestamp was not supplied.
+
 # 0.18.0
 
 Now using Ethers 5!
@@ -51,6 +494,7 @@ Now using Ethers 5!
 # 0.16.3
 
 - Fixing unlockAddress in walletService
+
 # 0.16.2
 
 - WalletService sets the unlock contract address based on connected network
@@ -63,6 +507,7 @@ Now using Ethers 5!
 # 0.16
 
 - Breaking change: support for multichains.
+
 # 0.15.2
 
 - Typescript definition fix
@@ -74,15 +519,19 @@ Now using Ethers 5!
 # 0.15.0
 
 - various API changes
+
 # 0.14.0
 
 - fixing approvals for ERC20 key purchases
+
 # 0.13.3
 
 - Updating types for key purchase function
+
 # 0.13.2
 
 - Bumping default gas prices for key purchases
+
 # 0.13.1
 
 - Adding referrer for v6, v7 and v8

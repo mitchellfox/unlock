@@ -1,7 +1,8 @@
 import express from 'express'
+import AuthController from '../controllers/authController'
 
-const router = express.Router({ mergeParams: true })
-const authController = require('../controllers/authController')
+const router: express.Router = express.Router({ mergeParams: true })
 
-router.post('/', authController.authorize)
-module.exports = router
+router.post('/', AuthController.authorize)
+
+export default router

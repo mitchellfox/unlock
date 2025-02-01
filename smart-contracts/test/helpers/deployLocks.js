@@ -1,29 +1,78 @@
-const PublicLock = artifacts.require('PublicLock')
-const createLockHash = require('./createLockCalldata')
-const Locks = require('../fixtures/locks')
+const { ethers } = require('hardhat')
+const deployContracts = require('../fixtures/deploy')
+const {
+  ADDRESS_ZERO,
+  MAX_UINT,
+  createLockCalldata,
+  lockFixtures: Locks,
+  getEvent,
+} = require('@unlock-protocol/hardhat-helpers')
 
-module.exports = async function deployLocks(
+async function deployLock({
   unlock,
-  from,
-  tokenAddress = web3.utils.padLeft(0, 40)
-) {
-  let locks = {}
-  await Promise.all(
-    Object.keys(Locks).map(async (name) => {
-      const args = [
-        Locks[name].expirationDuration.toFixed(),
-        tokenAddress,
-        Locks[name].keyPrice.toFixed(),
-        Locks[name].maxNumberOfKeys.toFixed(),
-        Locks[name].lockName,
-      ]
-      const calldata = await createLockHash({ args, from })
-      const tx = await unlock.createLock(calldata)
-      const evt = tx.logs.find((v) => v.event === 'NewLock')
-      const lock = await PublicLock.at(evt.args.newLockAddress)
-      locks[name] = lock
-      locks[name].params = Locks[name]
-    })
+  from: deployer,
+  tokenAddress = ADDRESS_ZERO,
+  name = 'FIRST',
+  keyPrice,
+} = {}) {
+  if (!unlock) {
+    ;({ unlock } = await deployContracts())
+  }
+
+  // parse deployer as ethers signer
+  if (!deployer) {
+    ;[deployer] = await ethers.getSigners()
+  } else if (typeof deployer === 'string') {
+    deployer = await ethers.getSigner(deployer)
+  }
+
+  const {
+    expirationDuration: expirationDurationArg,
+    keyPrice: price,
+    maxNumberOfKeys,
+    lockName,
+    maxKeysPerAddress,
+  } = Locks[name]
+
+  const expirationDuration =
+    name === 'NON_EXPIRING' ? MAX_UINT : expirationDurationArg.toString()
+
+  const args = [
+    expirationDuration || 60,
+    tokenAddress,
+    (keyPrice || price).toString(),
+    (maxNumberOfKeys || 10).toString(),
+    lockName,
+  ]
+
+  const calldata = await createLockCalldata({
+    args,
+    from: await deployer.getAddress(),
+  })
+
+  // attach Lock contract abi from newly created lock in Unlock event
+  const tx = await unlock.createUpgradeableLock(calldata)
+  const receipt = await tx.wait()
+  const {
+    args: { newLockAddress },
+  } = await getEvent(receipt, 'NewLock')
+
+  const lock = await ethers.getContractAt(
+    'contracts/PublicLock.sol:PublicLock',
+    newLockAddress
   )
-  return locks
+
+  if (maxKeysPerAddress) {
+    await lock.connect(deployer).updateLockConfig(
+      expirationDuration,
+      maxNumberOfKeys,
+      10 // default maxKeysPerAddress to 10 for tests
+    )
+  }
+
+  return lock
+}
+
+module.exports = {
+  deployLock,
 }

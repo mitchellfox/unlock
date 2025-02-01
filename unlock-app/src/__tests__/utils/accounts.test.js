@@ -1,18 +1,16 @@
+import { vi, describe, beforeAll, expect, it } from 'vitest'
+
 import {
   createAccountAndPasswordEncryptKey,
   getAccountFromPrivateKey,
   reEncryptPrivateKey,
 } from '../../utils/accounts'
-
 import { WALLET_ENCRYPTION_OPTIONS } from '../../constants'
-
-jest.setTimeout(20000)
 
 describe('account helpers', () => {
   describe('web3 accounts creation', () => {
     it('should call ethers.createRandom', async () => {
       expect.assertions(3)
-
       const { address, passwordEncryptedPrivateKey } =
         await createAccountAndPasswordEncryptKey('hello')
 
@@ -53,7 +51,7 @@ describe('account helpers', () => {
         await getAccountFromPrivateKey(passwordEncryptedPrivateKey, 'ghost')
       } catch (e) {
         expect(e).toBeInstanceOf(Error)
-        expect(e.message).toBe('invalid password')
+        expect(e.message).toContain('incorrect password')
       }
     })
   })
@@ -94,7 +92,7 @@ describe('account helpers', () => {
       await reEncryptPrivateKey(passwordEncryptedPrivateKey, 'geist', 'ghost')
     } catch (e) {
       expect(e).toBeInstanceOf(Error)
-      expect(e.message).toBe('invalid password')
+      expect(e.message).toContain('incorrect password')
     }
   })
 })

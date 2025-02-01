@@ -1,3 +1,4 @@
+import { vi, describe, beforeEach, expect, it } from 'vitest'
 import pingPoap from '../../utils/poap'
 
 describe('pingPoap', () => {
@@ -30,7 +31,7 @@ describe('pingPoap', () => {
     })
   })
 
-  it('should not fail if fetch failed', () => {
+  it('should not fail if fetch failed', async () => {
     expect.assertions(2)
     const owner = '0xowner'
     const key = {
@@ -40,11 +41,12 @@ describe('pingPoap', () => {
     }
     const signature = 'signature'
     const timestamp = 123
-    const consoleSpy = jest.spyOn(global.console, 'error')
-    fetch.mockReject(() => {
-      throw new Error('fake error message')
-    })
-    expect(() => pingPoap(key, owner, signature, timestamp)).not.toThrow()
+    const consoleSpy = vi.spyOn(global.console, 'error')
+    fetch.mockReject(new Error('fake error message'))
+
+    await expect(
+      pingPoap(key, owner, signature, timestamp)
+    ).resolves.not.toThrow()
     expect(consoleSpy).toHaveBeenCalled()
   })
 })

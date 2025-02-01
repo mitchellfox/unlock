@@ -1,8 +1,9 @@
-const { expect } = require('chai')
+const assert = require('assert')
 const { ethers, upgrades } = require('hardhat')
-const { reverts } = require('truffle-assertions')
+const { reverts, ADDRESS_ZERO } = require('../helpers')
+const { getEvent } = require('@unlock-protocol/hardhat-helpers')
 
-contract('PublicLock template versions', () => {
+describe('PublicLock template versions', () => {
   let unlock
   let publicLock
   let publicLockUpgraded
@@ -10,73 +11,109 @@ contract('PublicLock template versions', () => {
   beforeEach(async () => {
     const Unlock = await ethers.getContractFactory('Unlock')
     const [unlockOwner] = await ethers.getSigners()
-    unlock = await upgrades.deployProxy(Unlock, [unlockOwner.address], {
-      initializer: 'initialize(address)',
-    })
-    await unlock.deployed()
+    unlock = await upgrades.deployProxy(
+      Unlock,
+      [await unlockOwner.getAddress()],
+      {
+        initializer: 'initialize(address)',
+      }
+    )
 
-    const PublicLock = await ethers.getContractFactory('PublicLock')
+    const PublicLock = await ethers.getContractFactory(
+      'contracts/PublicLock.sol:PublicLock'
+    )
     publicLock = await PublicLock.deploy()
-    await publicLock.deployed()
 
     // deploy new implementation
     const PublicLockUpgraded = await ethers.getContractFactory(
       'TestPublicLockUpgraded'
     )
     publicLockUpgraded = await PublicLockUpgraded.deploy()
-    await publicLockUpgraded.deployed()
   })
 
   it('Should forbid non-owner to add impl', async () => {
     const [, , , signer] = await ethers.getSigners()
     await reverts(
-      unlock.connect(signer).addLockTemplate(publicLock.address, 3),
-      'Ownable: caller is not the owner'
+      unlock.connect(signer).addLockTemplate(await publicLock.getAddress(), 3),
+      'ONLY_OWNER'
     )
   })
 
-  it('Should store latest version properly', async () => {
-    const tx1 = await unlock.addLockTemplate(publicLock.address, 1)
+  it('Should store version number properly', async () => {
+    const tx1 = await unlock.addLockTemplate(await publicLock.getAddress(), 1)
     await tx1.wait()
-    expect(await unlock.publicLockLatestVersion()).to.equals(1)
+    assert.equal(
+      await unlock.publicLockVersions(await publicLock.getAddress()),
+      1n
+    )
 
-    const tx2 = await unlock.addLockTemplate(publicLockUpgraded.address, 2)
+    const tx2 = await unlock.addLockTemplate(
+      await publicLockUpgraded.getAddress(),
+      2
+    )
     await tx2.wait()
-    expect(await unlock.publicLockLatestVersion()).to.equals(2)
+    assert.equal(
+      await unlock.publicLockVersions(await publicLockUpgraded.getAddress()),
+      2n
+    )
+  })
 
+  it('should revert if the template was already initialized', async () => {
+    await unlock.addLockTemplate(await publicLock.getAddress(), 1)
+    const [, , , signer] = await ethers.getSigners()
+    await reverts(
+      publicLock.initialize(
+        await signer.getAddress(),
+        0,
+        ADDRESS_ZERO,
+        0,
+        0,
+        ''
+      )
+    )
+  })
+
+  it('should revert if the template is not a contract', async () => {
     // jump versions is allowed
     const { address: randomAddress } = await ethers.Wallet.createRandom()
-    const txn = await unlock.addLockTemplate(randomAddress, 532)
-    await txn.wait()
-    expect(await unlock.publicLockLatestVersion()).to.equals(532)
+    await reverts(unlock.addLockTemplate(randomAddress, 532), 'non-contract')
   })
 
   it('Should store publicLockImpls properly', async () => {
-    const tx1 = await unlock.addLockTemplate(publicLock.address, 1)
+    const tx1 = await unlock.addLockTemplate(await publicLock.getAddress(), 1)
     await tx1.wait()
-    expect(await unlock.publicLockImpls(1)).to.equals(publicLock.address)
-    expect(await unlock.publicLockVersions(publicLock.address)).to.equals(1)
+    assert.equal(await unlock.publicLockImpls(1), await publicLock.getAddress())
+    assert.equal(
+      await unlock.publicLockVersions(await publicLock.getAddress()),
+      1n
+    )
 
     // make sure everything is stored properly
-    const tx2 = await unlock.addLockTemplate(publicLockUpgraded.address, 2)
-    await tx2.wait()
-    expect(await unlock.publicLockImpls(2)).to.equals(
-      publicLockUpgraded.address
+    const tx2 = await unlock.addLockTemplate(
+      await publicLockUpgraded.getAddress(),
+      2
     )
-    expect(
-      await unlock.publicLockVersions(publicLockUpgraded.address)
-    ).to.equals(2)
+    await tx2.wait()
+    assert.equal(
+      await unlock.publicLockImpls(2),
+      await publicLockUpgraded.getAddress()
+    )
+    assert.equal(
+      await unlock.publicLockVersions(await publicLockUpgraded.getAddress()),
+      2n
+    )
   })
 
   it('should fire an event when template is added', async () => {
-    // add a random template
-    const { address: randomAddress } = await ethers.Wallet.createRandom()
-    const tx = await unlock.addLockTemplate(randomAddress, 3)
-    const { events } = await tx.wait()
-    const evt = events.find((v) => v.event === 'UnlockTemplateAdded')
+    const tx = await unlock.addLockTemplate(await publicLock.getAddress(), 3)
+    const receipt = await tx.wait()
+    const evt = await getEvent(receipt, 'UnlockTemplateAdded')
     const { impl } = evt.args
-    expect(impl).to.equals(randomAddress)
-    expect(await unlock.publicLockImpls(3)).to.equals(randomAddress)
-    expect(await unlock.publicLockVersions(randomAddress)).to.equals(3)
+    assert.equal(impl, await publicLock.getAddress())
+    assert.equal(await unlock.publicLockImpls(3), await publicLock.getAddress())
+    assert.equal(
+      await unlock.publicLockVersions(await publicLock.getAddress()),
+      3n
+    )
   })
 })

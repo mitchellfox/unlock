@@ -1,5 +1,3 @@
-import axios from 'axios'
-
 export enum emailTemplate {
   signupConfirmation = 'confirmEmail',
   welcome = 'welcome',
@@ -25,7 +23,9 @@ export default class WedlockService {
     template: emailTemplate,
     recipient: string,
     params: Params = {},
-    attachments: Attachment[] = []
+    attachments: Attachment[] = [],
+    replyTo?: string | null,
+    emailSender?: string | null
   ) => {
     try {
       const payload = {
@@ -33,14 +33,16 @@ export default class WedlockService {
         recipient,
         params,
         attachments,
+        replyTo,
+        emailSender,
       }
-      const result = await axios.post(this.uri, payload, {
+      return await fetch(this.uri, {
+        method: 'POST',
         headers: {
-          'content-type': 'application/json',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(payload),
       })
-
-      return result
     } catch (error) {
       console.error('Failed to send email', error)
     }
@@ -54,13 +56,6 @@ export default class WedlockService {
         encrypt: true,
       },
       confirmLink,
-    })
-  }
-
-  welcomeEmail = (recipient: string, recoveryLink: string) => {
-    return this.sendEmail(emailTemplate.welcome, recipient, {
-      email: encodeURIComponent(recipient),
-      recoveryLink,
     })
   }
 

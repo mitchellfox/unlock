@@ -1,7 +1,7 @@
 version: '3.2'
 services:
-
-  eth-node: # hardhat node
+  eth-node:
+    # hardhat node
     image: eth-node
     build:
       context: ./development/eth-node
@@ -9,29 +9,50 @@ services:
     ports:
       - 8545:8545
 
-  smart-contract-extensions: # example of Unlock integrations
-    image: smart-contract-extensionss
-    build:
-      context: ../
-      target: dev
-      args:
-        BUILD_DIR: smart-contract-extensions
-
-  smart-contracts: # Image with our contracts
+  smart-contracts:
+    # Image with our contracts
     image: smart-contracts
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: smart-contracts
+  
+  governance:
+    # Image with our contracts
+    image: governance
+    build:
+      context: ../
+      target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
+      args:
+        BUILD_DIR: governance
 
-  unlock-app: # Container for the dashboard
+  subgraph:
+    # Subgraph unit testing
+    image: subgraph
+    platform: linux/amd64
+    build:
+      context: ../
+      target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
+      args:
+        BUILD_DIR: subgraph
+
+  unlock-app:
+    # Container for the dashboard
     env_file:
       - ./${UNLOCK_ENV}.env
     image: unlock-app
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: unlock-app
     ports:
@@ -39,100 +60,142 @@ services:
     expose:
       - 3000
 
-  unlock-protocol-com: # Container for the static site
+  unlock-protocol-com:
+    # Container for the static site
     env_file:
       - ./${UNLOCK_ENV}.env
     image: unlock-protocol-com
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: unlock-protocol-com
     ports:
       - 3002:3002
 
-  paywall-app: # Container for the paywall application
+  paywall-app:
+    # Container for the paywall application
     env_file:
       - ./${UNLOCK_ENV}.env
     image: paywall-app
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: paywall-app
     ports:
       - 3001:3001
 
-  paywall: # Container for the paywall application
+  paywall:
+    # Container for the paywall application
     env_file:
       - ./${UNLOCK_ENV}.env
     image: paywall
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: packages/paywall
     ports:
       - 3001:3001
 
-  newsletter: # Container for the newsletter application
-    image: newsletter
-    build:
-      context: ../
-      target: dev
-      args:
-        BUILD_DIR: newsletter
-    env_file:
-      - ./${UNLOCK_ENV}.env
-    ports:
-      - 3003:3003
-
-  unlock-js: # Container for Unlockjs
+  unlock-js:
+    # Container for Unlockjs
     image: unlock-js
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: packages/unlock-js
     env_file:
       - ./${UNLOCK_ENV}.env
-    depends_on:
-      - eth-node
+  core:
+    # Container for Unlockjs
+    image: core
+    build:
+      context: ../
+      target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
+      args:
+        BUILD_DIR: packages/core
+    env_file:
+      - ./${UNLOCK_ENV}.env
+  hardhat-plugin:
+    # Container for @unlock-protocol/hardhat-plugin
+    image: hardhat-plugin
+    build:
+      context: ../
+      target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
+      args:
+        BUILD_DIR: packages/hardhat-plugin
+    env_file:
+      - ./${UNLOCK_ENV}.env
 
+  contracts:
+    # Container for @unlock-protocol/contracts
+    image: contracts
+    build:
+      context: ../
+      target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
+      args:
+        BUILD_DIR: packages/contracts
+    env_file:
+      - ./${UNLOCK_ENV}.env
 
-  wedlocks: # Container for wedlocks
+  wedlocks:
+    # Container for wedlocks
     image: wedlocks
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: wedlocks
     env_file:
       - ./${UNLOCK_ENV}.env
 
-  integration-tests: # Imagewhich runs integration tests
+  integration-tests:
+    # Imagewhich runs integration tests
     image: integration-tests
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: integration-tests
-
     env_file:
       - ./${UNLOCK_ENV}.env
     depends_on:
-      # - eth-node
+      - eth-node
       - unlock-app
       - paywall
       - locksmith
       - unlock-protocol-com
       - graph-node
 
-  locksmith: # image with locksmith
+  locksmith:
+    # image with locksmith
     image: locksmith
     build:
       context: ../
       target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
       args:
         BUILD_DIR: locksmith
     env_file:
@@ -144,11 +207,43 @@ services:
     depends_on:
       - postgres
 
+  locksmith-websub:
+    image: locksmith-websub
+    build:
+      context: ../
+      target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
+      args:
+        BUILD_DIR: locksmith
+    env_file:
+      - ././${UNLOCK_ENV}.env
+      - ./integration-locksmith.env
+    command: sh -c './scripts/wait-for.sh postgres:5432 -- yarn db:migrate && yarn websub:start'
+    depends_on:
+      - postgres
+      
+  docs:
+    # Container for the static site
+    env_file:
+      - ./${UNLOCK_ENV}.env
+    image: docs
+    build:
+      context: ../
+      target: dev
+      cache_from:
+        - unlockprotocol/unlock-dev
+      args:
+        BUILD_DIR: docs
+    ports:
+      - 3003:3003
+
   #############
   # Overrides #
   #############
 
-  graph-node: # subgraph
+  graph-node:
+    # subgraph
     env_file:
       - ././${UNLOCK_ENV}.env
       - ./integration-graph-node.env
@@ -156,12 +251,14 @@ services:
       - ipfs
       - postgres
 
-  ipfs: # Required for subgraph
-    image: ipfs/go-ipfs:v0.10.0
+  ipfs:
+    # Required for subgraph
+    image: ipfs/go-ipfs:v0.32.1
     ports:
       - '5001:5001'
 
-  subgraph_deployment: # Image which sets up the subgraph
+  subgraph_deployment:
+    # Image which sets up the subgraph
     image: subgraph_deployment
     build:
       context: ./development
@@ -172,6 +269,7 @@ services:
       - postgres
       - graph-node
 
-  postgres: # locksmith the subgraph store data in it
+  postgres:
+    # locksmith the subgraph store data in it
     env_file:
       - ./${UNLOCK_ENV}.env

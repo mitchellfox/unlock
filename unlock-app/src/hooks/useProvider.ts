@@ -1,236 +1,158 @@
-import { ethers } from 'ethers'
-import { useState, useContext } from 'react'
+import { useContext } from 'react'
 import { WalletService } from '@unlock-protocol/unlock-js'
 import ProviderContext from '../contexts/ProviderContext'
-import UnlockProvider from '../services/unlockProvider'
-
-export interface EthereumWindow extends Window {
-  web3: any
-  ethereum: any
-}
+import { ToastHelper } from '../components/helpers/toast.helper'
+import { useSession } from './useSession'
+import { config } from '~/config/app'
+import { ethers } from 'ethers'
+import networks from '@unlock-protocol/networks'
 
 interface WatchAssetInterface {
   address: string
-  symbol: string
-  image: string
+  network: number
+  tokenId: string
 }
 
-/**
- * Initializes a provider passed
- * @param providerAdapter
- */
-export const useProvider = (config: any) => {
+export const useProvider = () => {
   const { setProvider, provider } = useContext(ProviderContext)
+  const { session: account } = useSession()
 
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [walletService, setWalletService] = useState<any>()
-  const [network, setNetwork] = useState<string | undefined>(undefined)
-  const [account, setAccount] = useState<string | undefined>(undefined)
-  const [signedMessage, setSignedMessage] = useState<string | undefined>(
-    undefined
-  )
-  const [email, setEmail] = useState<string | undefined>(undefined)
-  const [isUnlockAccount, setIsUnlockAccount] = useState<boolean>(false)
-  const [encryptedPrivateKey, setEncryptedPrivateKey] = useState<
-    any | undefined
-  >(undefined)
-
-  const resetProvider = async (
-    provider: ethers.providers.Provider,
-    messageToSign?: string
-  ) => {
-    setError('')
-    try {
-      const _walletService = new WalletService(config.networks)
-
-      setProvider(provider)
-      // @ts-expect-error TODO fix walletService signature
-      const _network = await _walletService.connect(provider)
-      setNetwork(_network || undefined)
-
-      const _account = await _walletService.getAccount()
-      let _signedMessage
-      if (messageToSign) {
-        // @ts-expect-error
-        _signedMessage = await _walletService.signMessage(
-          messageToSign,
-          'personal_sign'
-        )
-
-        setSignedMessage(_signedMessage)
-      }
-      setWalletService(_walletService)
-      setAccount(_account || undefined)
-      // @ts-expect-error
-      if (!provider.isUnlock) {
-        return {
-          network: _network,
-          account: _account,
-          signedMessage: _signedMessage,
-        }
-      }
-      // @ts-expect-error
-      setIsUnlockAccount(provider.isUnlock)
-      // @ts-expect-error
-      setEmail(provider.emailAddress)
-      // @ts-expect-error
-      setEncryptedPrivateKey(provider.passwordEncryptedPrivateKey)
-      return {
-        network: _network,
-        account: _account,
-        signedMessage: _signedMessage,
-        // @ts-expect-error
-        isUnlock: provider.isUnlock,
-        // @ts-expect-error
-        email: provider.emailAddress,
-        // @ts-expect-error
-        passwordEncryptedPrivateKey: provider.passwordEncryptedPrivateKey,
-      }
-    } catch (error: any) {
-      if (error.message.startsWith('Missing config')) {
-        setError(
-          `Unlock is currently not deployed on this network. Please switch network and refresh the page: ${error.message}`
-        )
-      } else {
-        setError(error.message)
-      }
-      setProvider(null)
-      console.error(error)
-      return {}
+  const createBrowserProvider = (
+    provider: any
+  ): ethers.BrowserProvider | null => {
+    if (!provider) {
+      return null
     }
+    const browserProvider = new ethers.BrowserProvider(provider, 'any')
+    if (provider.parentOrigin) {
+      // @ts-expect-error Property 'parentOrigin' does not exist on type 'BrowserProvider'.
+      browserProvider.parentOrigin = provider.parentOrigin
+    }
+    return browserProvider
   }
 
-  const connectProvider = async (provider: any, messageToSign: string) => {
-    setLoading(true)
-    let auth
-    if (provider instanceof ethers.providers.Provider) {
-      auth = await resetProvider(provider, messageToSign)
-    } else {
-      if (provider.enable) {
-        try {
-          await provider.enable()
-        } catch {
-          alert('Please, check your wallet and try again to connect.')
-          return
-        }
-      }
-      const ethersProvider = new ethers.providers.Web3Provider(provider)
-
-      if (provider.on) {
-        provider.on('accountsChanged', () => {
-          resetProvider(
-            new ethers.providers.Web3Provider(provider),
-            messageToSign
-          )
-        })
-
-        provider.on('chainChanged', () => {
-          resetProvider(new ethers.providers.Web3Provider(provider))
-        })
-      }
-      auth = await resetProvider(ethersProvider, messageToSign)
-    }
-
-    setLoading(false)
-    return auth
-  }
-
-  const disconnectProvider = async () => {
-    setLoading(true)
+  /**
+   * Initializes a `WalletService` instance with the provided provider.
+   * This helps setup the connection to the blockchain
+   * and retrieving essential information like the network and account.
+   *
+   * @param provider - The Ethereum provider to connect with
+   * @returns An object containing the initialized WalletService, provider, network, and account
+   *
+   */
+  const createWalletService = async (provider: any) => {
     const _walletService = new WalletService(config.networks)
-    setWalletService(_walletService)
-    setNetwork(undefined)
-    setAccount(undefined)
-    setIsUnlockAccount(false)
-    setEmail('')
-    setEncryptedPrivateKey(null)
-    try {
-      await provider.provider.close()
-    } catch (error) {
-      console.error(
-        'We could not disconnect provider properly using provider.disconnect()'
-      )
-      console.error(error)
+    const _network = await _walletService.connect(provider)
+    const _account = await _walletService.getAccount()
+    return {
+      walletService: _walletService,
+      provider,
+      network: _network,
+      account: _account,
     }
-    setProvider(null)
-    setLoading(false)
   }
 
-  const changeNetwork = async (network: any) => {
-    if (provider.isUnlock) {
-      const newProvider = UnlockProvider.reconnect(provider, network)
-      resetProvider(newProvider)
-    } else {
-      try {
-        await provider.send(
-          'wallet_switchEthereumChain',
-          [
-            {
-              chainId: `0x${network.id.toString(16)}`,
-            },
-          ],
-          account
-        )
-      } catch (switchError: any) {
-        // This error code indicates that the chain has not been added to the provider yet.
-        if (switchError.code === 4902) {
-          try {
-            await provider.send(
-              'wallet_addEthereumChain',
-              [
-                {
-                  chainId: `0x${network.id.toString(16)}`,
-                  chainName: network.name,
-                  rpcUrls: [network.publicProvider],
-                  nativeCurrency: network.nativeCurrency,
-                },
-              ],
-              account
-            )
-          } catch (addError) {
-            window.alert(
-              'Network could not be added. Please try manually adding it to your wallet'
-            )
-          }
-        } else {
-          window.alert(
-            'Network could not be changed. Please change it from your wallet.'
-          )
-        }
+  const addNetworkToWallet = async (networkId: number) => {
+    const {
+      id,
+      name: chainName,
+      publicProvider,
+      nativeCurrency,
+      explorer,
+    } = networks[networkId] as any
+
+    const params = {
+      chainId: `0x${id.toString(16)}`,
+      rpcUrls: [publicProvider],
+      chainName,
+      nativeCurrency,
+      blockExplorerUrls: [explorer.urls.base],
+    }
+
+    return provider.send('wallet_addEthereumChain', [params], account)
+  }
+
+  const switchProviderNetwork = async (id: number) => {
+    try {
+      await provider.send('wallet_switchEthereumChain', [
+        {
+          chainId: `0x${id.toString(16)}`,
+        },
+      ])
+    } catch (switchError: any) {
+      if (switchError.code === 4902 || switchError.code === -32603) {
+        return addNetworkToWallet(id)
+      } else {
+        console.error('There was an error switching networks:', switchError)
+        throw switchError
       }
     }
   }
 
+  /**
+   * Retrieves or initializes a `WalletService` for a specific network.
+   * It does the following:
+   * 1. Retrieves the current Ethereum provider from the wallet.
+   * 2. Checks the current network and compares it with the requested network.
+   * 3. If necessary, prompts the user to switch to the requested network.
+   * 4. Creates and returns a `WalletService` instance for the appropriate network.
+   *
+   * @param networkId - Optional network ID to connect to. If not provided, uses the current network.
+   * @returns An initialized `WalletService` instance for the specified or current network.
+   * @throws an error if there's an issue during the process, such as failed network switching.
+   */
+  const getWalletService = async (networkId?: number) => {
+    if (!provider) {
+      ToastHelper.error('Please make sure your wallet is connected.')
+      throw new Error('Wallet not connected!')
+    }
+    try {
+      // Get the current network
+      const network = await provider.getNetwork()
+      const currentChainId = network.chainId
+
+      // compare the networkId with the current chainId
+      if (networkId && networkId !== currentChainId) {
+        // Prompt user to switch to the requested network
+        await switchProviderNetwork(networkId)
+        // Add a 1 second delay after switching provider network
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+
+      // instantiate the wallet service with the current provider
+      const { walletService: _walletService } =
+        await createWalletService(provider)
+      return _walletService
+    } catch (error: any) {
+      ToastHelper.error(`Error while getting wallet service: ${error}`)
+      console.error('Error in getWalletService:', error)
+      throw error
+    }
+  }
+
+  // More info https://docs.metamask.io/wallet/reference/wallet_watchasset/
   const watchAsset = async ({
     address,
-    symbol,
-    image,
+    network,
+    tokenId,
   }: WatchAssetInterface) => {
+    await switchProviderNetwork(network)
     await provider.send('wallet_watchAsset', {
-      type: 'ERC20', // THIS IS A LIE, BUT AT LEAST WE CAN GET ADDED THERE!
+      type: 'ERC721',
       options: {
         address,
-        symbol,
-        decimals: 0,
-        image,
+        tokenId,
       },
     })
   }
 
   return {
-    loading,
-    network,
-    account,
-    signedMessage,
-    email,
-    isUnlockAccount,
-    encryptedPrivateKey,
-    walletService,
-    connectProvider,
-    disconnectProvider,
-    error,
+    getWalletService,
+    setProvider: (provider: any) => {
+      setProvider(createBrowserProvider(provider))
+    },
+    account: provider ? account : undefined,
     watchAsset,
-    changeNetwork,
+    provider,
   }
 }

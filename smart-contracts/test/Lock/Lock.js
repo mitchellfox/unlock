@@ -1,45 +1,43 @@
-const BigNumber = require('bignumber.js')
-const deployLocks = require('../helpers/deployLocks')
+const assert = require('assert')
+const { ethers } = require('hardhat')
+const { reverts, deployLock, compareBigNumbers } = require('../helpers')
 
-const unlockContract = artifacts.require('Unlock.sol')
-const getProxy = require('../helpers/proxy')
+const erc777abi = require('@unlock-protocol/hardhat-helpers/dist/ABIs/erc777.json')
 
-let unlock
-let locks
+let lock
 
-contract('Lock / Lock', (accounts) => {
+describe('Lock / Lock', () => {
   before(async () => {
-    unlock = await getProxy(unlockContract)
-    locks = await deployLocks(unlock, accounts[0])
+    lock = await deployLock()
   })
 
   it('should have created locks with the correct value', async () => {
-    const lock = locks.FIRST
     let [
       expirationDuration,
       keyPrice,
       maxNumberOfKeys,
       totalSupply,
       numberOfOwners,
-      isAlive,
     ] = await Promise.all([
-      lock.expirationDuration.call(),
-      lock.keyPrice.call(),
-      lock.maxNumberOfKeys.call(),
-      lock.totalSupply.call(),
-      lock.numberOfOwners.call(),
-      lock.isAlive.call(),
+      lock.expirationDuration(),
+      lock.keyPrice(),
+      lock.maxNumberOfKeys(),
+      lock.totalSupply(),
+      lock.numberOfOwners(),
     ])
-    expirationDuration = new BigNumber(expirationDuration)
-    keyPrice = new BigNumber(keyPrice)
-    maxNumberOfKeys = new BigNumber(maxNumberOfKeys)
-    totalSupply = new BigNumber(totalSupply)
-    numberOfOwners = new BigNumber(numberOfOwners)
-    assert.equal(expirationDuration.toFixed(), 60 * 60 * 24 * 30)
-    assert.strictEqual(web3.utils.fromWei(keyPrice.toFixed(), 'ether'), '0.01')
-    assert.equal(maxNumberOfKeys.toFixed(), 10)
-    assert.equal(totalSupply.toFixed(), 0)
-    assert.equal(numberOfOwners.toFixed(), 0)
-    assert.equal(isAlive, true)
+    compareBigNumbers(expirationDuration, 60 * 60 * 24 * 30)
+    assert.strictEqual(ethers.formatUnits(keyPrice), '0.01')
+    compareBigNumbers(maxNumberOfKeys, 10)
+    compareBigNumbers(totalSupply, 0)
+    compareBigNumbers(numberOfOwners, 0)
+  })
+
+  it('Should fail on unknown calls', async () => {
+    const [, recipient] = await ethers.getSigners()
+    const mock777 = await ethers.getContractAt(
+      erc777abi,
+      await lock.getAddress()
+    )
+    await reverts(mock777.send(await recipient.getAddress(), 1, '0x'))
   })
 })

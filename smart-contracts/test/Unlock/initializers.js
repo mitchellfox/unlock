@@ -1,29 +1,22 @@
-const unlockContract = artifacts.require('Unlock.sol')
+const assert = require('assert')
+const { ethers } = require('hardhat')
+const { reverts, deployContracts, parseInterface } = require('../helpers')
 
-const { reverts } = require('truffle-assertions')
-const getProxy = require('../helpers/proxy')
-const { errorMessages } = require('../helpers/constants')
-
-const { VM_ERROR_REVERT_WITH_REASON } = errorMessages
-
-let unlock
-
-contract('Unlock / initializers', (accounts) => {
-  beforeEach(async () => {
-    unlock = await getProxy(unlockContract)
-  })
-
+describe('Unlock / initializers', () => {
   it('There is only 1 public initializer in Unlock', async () => {
-    const count = unlockContract.abi.filter(
-      (x) => x.name.toLowerCase() === 'initialize'
+    const { interface } = await ethers.getContractFactory('Unlock')
+    const count = parseInterface(interface).filter(
+      (func) => func === 'function initialize(address)'
     ).length
     assert.equal(count, 1)
   })
 
   it('initialize may not be called again', async () => {
+    const { unlock } = await deployContracts()
+    const [, someAccount] = await ethers.getSigners()
     await reverts(
-      unlock.initialize(accounts[0]),
-      `${VM_ERROR_REVERT_WITH_REASON} 'Initializable: contract is already initialized'`
+      unlock.initialize(await someAccount.getAddress()),
+      'ALREADY_INITIALIZED'
     )
   })
 })

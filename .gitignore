@@ -9,9 +9,10 @@ zos.dev-*.json
 
 # Artifacts
 unlock-app/src/artifacts/
-smart-contract-extensions/build/
 smart-contracts/build/
 builds/
+
+/subgraph/subgraph.yaml
 
 # dot env files
 .env.*.local
@@ -30,3 +31,19 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+.eslintcache
+
+# Local Netlify folder
+.netlify
+.vercel
+
+# log files
+nohup.out
+
+#locksmith
+locksmith/uploads
+
+# blog importer cache
+.github/actions/blog/.yarn
+.github/actions/blog/.yarn/install-state.gz

@@ -1,134 +1,131 @@
 {
-    "extends": [
-        "config:base",
-        ":prHourlyLimitNone",
-        ":prConcurrentLimitNone",
-        ":pinVersions",
-        ":doNotPinPackage(node)"
-    ],
-    "timezone": "America/Los_Angeles",
-    "schedule": [
-        "on the first day of the month"
-    ],
-    "minor": {
-        "groupName": "minor and patch updates"
+  "extends": [
+    "config:recommended",
+    ":prHourlyLimitNone",
+    ":prConcurrentLimitNone",
+    ":pinAllExceptPeerDependencies",
+    ":doNotPinPackage(node)"
+  ],
+  "timezone": "America/Los_Angeles",
+  "schedule": ["on the first day of the month"],
+  "packageRules": [
+    {
+      "minor": {
+        "groupName": "packages/contracts"
+      },
+      "matchFileNames": ["packages/contracts/**"]
     },
-    "packageRules": [
-        {
-            "minor": {
-                "groupName": "tests"
-            },
-            "matchPaths": [
-                "tests/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "locksmith"
-            },
-            "matchPaths": [
-                "locksmith/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "paywall"
-            },
-            "matchPaths": [
-                "paywall/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "smart-contracts"
-            },
-            "matchPaths": [
-                "smart-contracts/**",
-                "smart-contract-extensions/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "unlock-app"
-            },
-            "matchPaths": [
-                "unlock-app/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "unlock-js"
-            },
-            "matchPaths": [
-                "unlock-js/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "unlock-protocol.com"
-            },
-            "matchPaths": [
-                "unlock-protocol.com/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "wedlocks"
-            },
-            "matchPaths": [
-                "wedlocks/**"
-            ]
-        },
-        {
-            "minor": {
-                "groupName": "subgraph"
-            },
-            "matchPaths": [
-                "subgraph/**"
-            ]
-        },
-        {
-            "major": {
-                "groupName": null
-            },
-            "matchPackagePatterns": [
-                "*"
-            ]
-        },
-        {
-            "schedule": [
-                "at any time"
-            ],
-            "minor": {
-                "groupName": "hardlydifficult-ethereum-contracts"
-            },
-            "matchPackageNames": [
-                "hardlydifficult-ethereum-contracts"
-            ]
-        },
-        {
-            "schedule": [
-                "at any time"
-            ],
-            "minor": {
-                "groupName": "unlock-js npm package"
-            },
-            "matchPackageNames": [
-                "@unlock-protocol/unlock-js",
-                "@unlock-protocol/unlock-assets"
-            ]
-        },
-        {
-            "schedule": [
-                "at any time"
-            ],
-            "minor": {
-                "groupName": "unlock-abi npm package"
-            },
-            "matchPackagePatterns": [
-                "unlock-abi-*"
-            ]
-        }
-    ],
-    "rebaseWhen": "behind-base-branch"
+    {
+      "minor": {
+        "groupName": "packages/eslint-config"
+      },
+      "matchFileNames": ["packages/eslint-config/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/hardhat-plugin"
+      },
+      "matchFileNames": ["packages/hardhat-plugin/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/networks"
+      },
+      "matchFileNames": ["packages/networks/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/paywall"
+      },
+      "matchFileNames": ["packages/paywall/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/tsconfig"
+      },
+      "matchFileNames": ["packages/tsconfig/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/types"
+      },
+      "matchFileNames": ["packages/types/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/ui"
+      },
+      "matchFileNames": ["packages/ui/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/unlock-express"
+      },
+      "matchFileNames": ["packages/unlock-express/**"]
+    },
+    {
+      "minor": {
+        "groupName": "packages/unlock-js"
+      },
+      "matchFileNames": ["packages/unlock-js/**"]
+    },
+    {
+      "minor": {
+        "groupName": "tests"
+      },
+      "matchFileNames": ["tests/**"]
+    },
+    {
+      "minor": {
+        "groupName": "locksmith"
+      },
+      "matchFileNames": ["locksmith/**"]
+    },
+    {
+      "minor": {
+        "groupName": "paywall-app"
+      },
+      "matchFileNames": ["paywall-app/**"]
+    },
+    {
+      "minor": {
+        "groupName": "smart-contracts"
+      },
+      "matchFileNames": ["smart-contracts/**"]
+    },
+    {
+      "minor": {
+        "groupName": "unlock-app"
+      },
+      "matchFileNames": ["unlock-app/**"]
+    },
+    {
+      "minor": {
+        "groupName": "unlock-protocol.com"
+      },
+      "matchFileNames": ["unlock-protocol.com/**"]
+    },
+    {
+      "minor": {
+        "groupName": "wedlocks"
+      },
+      "matchFileNames": ["wedlocks/**"]
+    },
+    {
+      "minor": {
+        "groupName": "subgraph"
+      },
+      "matchFileNames": ["subgraph/**"]
+    },
+    {
+      "minor": {
+        "groupName": "eth-node"
+      },
+      "matchFileNames": ["docker/development/eth-node/**"]
+    }
+  ],
+  "rebaseWhen": "never",
+  "lockFileMaintenance": {
+    "enabled": true
+  }
 }

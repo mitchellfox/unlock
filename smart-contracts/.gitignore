@@ -3,6 +3,7 @@
 /coverageEnv/
 
 mnemonic.*
+accounts.*.js
 .openzeppelin/.session
 .openzeppelin/dev-1337.json
 .openzeppelin/unknown-31337.json
@@ -11,9 +12,11 @@ artifacts/
 cache/
 *.generated.sol
 *.generated.sol*
+*.flatten.sol
 *.sol.rej
 *.ref 
 
+deployments/*
 deployments/hardhat
 deployments/localhost
 deployments/ganache
@@ -23,3 +26,5 @@ contracts/past-versions
 coverage
 coverage.json
 drafts
+
+.env

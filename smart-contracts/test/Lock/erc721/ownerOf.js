@@ -1,30 +1,39 @@
-const { constants } = require('hardlydifficult-ethereum-contracts')
-const deployLocks = require('../../helpers/deployLocks')
+const assert = require('assert')
+const { ethers } = require('hardhat')
+const { deployLock, ADDRESS_ZERO, purchaseKey } = require('../../helpers')
+let lock
 
-const unlockContract = artifacts.require('Unlock.sol')
-const getProxy = require('../../helpers/proxy')
-
-let unlock
-let locks
-
-contract('Lock / erc721 / ownerOf', (accounts) => {
+describe('Lock / erc721 / ownerOf', () => {
+  let keyOwner, anotherAccount
   before(async () => {
-    unlock = await getProxy(unlockContract)
-    locks = await deployLocks(unlock, accounts[0])
+    ;[, keyOwner, anotherAccount] = await ethers.getSigners()
+    lock = await deployLock()
   })
 
   it('should return 0x0 when key is nonexistent', async () => {
-    let address = await locks.FIRST.ownerOf.call(42)
-    assert.equal(address, constants.ZERO_ADDRESS)
+    let address = await lock.ownerOf(42)
+    assert.equal(address, ADDRESS_ZERO)
   })
 
   it('should return the owner of the key', async () => {
-    await locks.FIRST.purchase(0, accounts[1], web3.utils.padLeft(0, 40), [], {
-      value: web3.utils.toWei('0.01', 'ether'),
-      from: accounts[1],
-    })
-    const ID = await locks.FIRST.getTokenIdFor.call(accounts[1])
-    let address = await locks.FIRST.ownerOf.call(ID)
-    assert.equal(address, accounts[1])
+    const { tokenId } = await purchaseKey(lock, await keyOwner.getAddress())
+    let address = await lock.ownerOf(tokenId)
+    assert.equal(address, await keyOwner.getAddress())
+  })
+
+  it('should work correctly after a transfer', async () => {
+    const { tokenId } = await purchaseKey(lock, await keyOwner.getAddress())
+    let address = await lock.ownerOf(tokenId)
+    assert.equal(address, await keyOwner.getAddress())
+
+    // transfer
+    await lock
+      .connect(keyOwner)
+      .transferFrom(
+        await keyOwner.getAddress(),
+        await anotherAccount.getAddress(),
+        tokenId
+      )
+    assert.equal(await lock.ownerOf(tokenId), await anotherAccount.getAddress())
   })
 })

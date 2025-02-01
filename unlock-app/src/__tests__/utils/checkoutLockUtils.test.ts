@@ -2,8 +2,13 @@ import {
   lockKeysAvailable,
   lockTickerSymbol,
   userCanAffordKey,
+  formattedKeyPrice,
+  convertedKeyPrice,
 } from '../../utils/checkoutLockUtils'
+import { it, describe, expect } from 'vitest'
 
+const lockAddress = '0x2B24bE6c9d5b70Ad53203AdB780681cd70603660'
+const network = 5
 describe('Checkout Lock Utils', () => {
   describe('lockKeysAvailable', () => {
     it('returns Unlimited if it has unlimited keys', () => {
@@ -148,6 +153,79 @@ describe('Checkout Lock Utils', () => {
       }
 
       expect(userCanAffordKey(lock, '50')).toBeFalsy()
+    })
+
+    it('correctly format keyPrice prices', () => {
+      expect.assertions(2)
+      const lock1 = {
+        keyPrice: '100',
+        currencyContractAddress: 'obc3',
+        currencySymbol: 'eth',
+        address: lockAddress,
+        network,
+      }
+      const lock2 = {
+        keyPrice: '0',
+        currencyContractAddress: 'Oxbe',
+        currencySymbol: 'eth',
+        address: lockAddress,
+        network,
+      }
+
+      expect(formattedKeyPrice(lock1, lock1.currencySymbol)).toEqual('100 ETH')
+
+      expect(formattedKeyPrice(lock2, lock1.currencySymbol)).toEqual('FREE')
+    })
+
+    it('correctly format keyPrice based on numbersOfRecipients', () => {
+      expect.assertions(2)
+      const numbersOfRecipients = 3
+
+      const lock1 = {
+        keyPrice: '12.4',
+        currencyContractAddress: 'obc3',
+        currencySymbol: 'eth',
+        address: lockAddress,
+        network,
+      }
+      const lock2 = {
+        keyPrice: '0',
+        currencyContractAddress: 'Oxbe',
+        currencySymbol: 'eth',
+        address: lockAddress,
+        network,
+      }
+      expect(
+        formattedKeyPrice(lock1, lock1.currencySymbol, numbersOfRecipients)
+      ).toEqual('37.2 ETH')
+
+      expect(
+        formattedKeyPrice(lock2, lock1.currencySymbol, numbersOfRecipients)
+      ).toEqual('FREE')
+    })
+
+    // TODO: fix this test which is currently making a network request (network calls should be mocked)
+    it.skip('correctly convert keyPrice', async () => {
+      expect.assertions(2)
+      const numbersOfRecipients = 6
+
+      const lock = {
+        fiatPricing: {
+          usd: {
+            amount: 20.22,
+          },
+        },
+        address: lockAddress,
+        network,
+        currencyContractAddress: 'obc3',
+        currencySymbol: 'eth',
+      }
+
+      expect(await convertedKeyPrice(lock)).toEqual('~$20.22')
+
+      expect(await convertedKeyPrice(lock, numbersOfRecipients)).toEqual(
+        '~$121.32'
+      )
     })
   })
 })

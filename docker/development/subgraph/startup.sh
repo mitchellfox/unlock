@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
 
-echo "Migrating subgraph..."
+set -e
 
-# create config file
-yarn workspace @unlock-protocol/subgraph generate-subgraph-yaml
+echo "Preparing Unlock local subgraph..."
 
-# generate ts code 
-yarn workspace @unlock-protocol/subgraph codegen
+# generate ts code from ABIs
+yarn workspace @unlock-protocol/subgraph prepare:abis
+echo -e "✔ Unlock local ABI prepared\n\n"
+
+yarn workspace @unlock-protocol/subgraph copy:manifest
+
+yarn workspace @unlock-protocol/subgraph graph codegen
+echo -e "✔ Unlock local code generated\n\n"
 
 # build the subgraph files
-yarn workspace @unlock-protocol/subgraph build --network mainnet
+# show networks
+yarn workspace @unlock-protocol/subgraph graph build --network localhost
+echo -e "✔ Unlock local subgraph built\n\n"
 
 # init the graph
-yarn workspace @unlock-protocol/subgraph run create --network mainnet
+yarn workspace @unlock-protocol/subgraph run graph create testgraph --node http://graph-node:8020/
+echo -e "✔ Unlock local subgraph initiated\n\n"
 
 # deploy
-yarn workspace @unlock-protocol/subgraph run deploy --network mainnet --label 0.0.1
+yarn workspace @unlock-protocol/subgraph run graph deploy testgraph --node http://graph-node:8020/ --ipfs http://ipfs:5001 --version-label 0.0.1 --network localhost
+echo -e "✔ Unlock local subgraph deployed\n\n"

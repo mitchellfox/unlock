@@ -3,16 +3,14 @@
 
 // A bug in eslint causes it to think that this exported enum is "unused". So
 // disable eslint for that declaration until they fix it. TODO: follow up on this.
-/* eslint-disable no-unused-vars */
+
 export enum TransactionType {
   LOCK_CREATION = 'LOCK_CREATION',
   KEY_PURCHASE = 'KEY_PURCHASE',
   WITHDRAWAL = 'WITHDRAWAL',
   UPDATE_KEY_PRICE = 'UPDATE_KEY_PRICE',
 }
-/* eslint-enable no-unused-vars */
 
-/* eslint-disable no-unused-vars */
 export enum TransactionStatus {
   SUBMITTED = 'submitted',
   PENDING = 'pending',
@@ -21,15 +19,173 @@ export enum TransactionStatus {
   FAILED = 'failed',
   NONE = '', // for testing purposes
 }
-/* eslint-enable no-unused-vars */
 
-interface NetworkConfig {
-  provider: string
-  locksmithUri?: string
-  unlockAppUrl?: string
+// Event deployment status
+export enum EventStatus {
+  PENDING = 'pending',
+  DEPLOYED = 'deployed',
 }
+
+export interface NetworkDeploy {
+  unlockAddress: string
+  startBlock: number
+}
+
+export interface Token {
+  name: string
+  address: string
+  symbol: string
+  decimals: number
+  coingecko?: string
+  coinbase?: string
+  mainnetAddress?: string
+  wrapped?: string
+  featured?: boolean
+  faucet?: Faucet
+}
+
+export enum HookType {
+  CUSTOM_CONTRACT = 'CUSTOM_CONTRACT',
+  PASSWORD = 'PASSWORD',
+  PROMOCODE = 'PROMOCODE',
+  PROMO_CODE_CAPPED = 'PROMO_CODE_CAPPED',
+  PASSWORD_CAPPED = 'PASSWORD_CAPPED',
+  CAPTCHA = 'CAPTCHA',
+  GUILD = 'GUILD',
+  GITCOIN = 'GITCOIN',
+  ADVANCED_TOKEN_URI = 'ADVANCED_TOKEN_URI',
+  ALLOW_LIST = 'ALLOW_LIST',
+}
+
+export const HooksName = [
+  'onKeyPurchaseHook',
+  'onKeyCancelHook',
+  'onValidKeyHook',
+  'onTokenURIHook',
+  'onKeyTransferHook',
+  'onKeyExtendHook',
+  'onKeyGrantHook',
+] as const
+
+export type HookName = (typeof HooksName)[number]
+
+export interface Hook {
+  id: HookType
+  name: string
+  address: string
+  description?: string
+}
+
+// info about the bridge are available at
+// https://docs.connext.network/resources/deployments
+export interface NetworkBridgeConfig {
+  domainId: number
+  connext: string
+  modules?: {
+    connextMod?: string
+    delayMod?: string
+  }
+}
+
+export interface Faucet {
+  name: string
+  url: string
+}
+
+export interface NetworkConfig {
+  id: number
+  featured: boolean
+  dao?: {
+    governor: string
+    chainId: number
+    governanceBridge: NetworkBridgeConfig
+  }
+  name: string
+  chain: string
+  provider: string
+  publicProvider: string
+  unlockAddress: string
+  multisig?: string
+  keyManagerAddress?: string
+  kickbackAddress?: string
+  universalCard?: {
+    cardPurchaserAddress: string
+    stripeDestinationNetwork: string
+    stripeDestinationCurrency: string
+  }
+  publicLockVersionToDeploy: number
+  subgraph: {
+    endpoint: string
+    networkName?: string // network slug used by the graph
+    studioName?: string
+    graphId: string
+  }
+  uniswapV3?: Partial<{
+    subgraph: string
+    factoryAddress: string
+    quoterAddress: string
+    // uniswap oracles with varioous pool fees
+    oracle: Partial<{
+      500: string
+      100: string
+      3000: string
+    }>
+    universalRouterAddress: string
+    positionManager: string
+  }>
+  unlockOwner?: string
+  unlockDaoToken?: {
+    address: string
+    mainnetBridge?: string
+    uniswapV3Pool?: string
+  }
+  explorer?: {
+    name: string
+    urls: {
+      base: string
+      address(address: string): string
+      transaction(hash: string): string
+      token(address: string, owner: string): string
+    }
+  }
+  opensea?: {
+    tokenUrl: (lockAddress: string, tokenId: string) => string | null
+    collectionUrl?: (lockAddress: string) => string
+    profileUrl?: (address: string) => string
+  }
+  blockScan?: {
+    url?: (address: string) => string
+  }
+  isTestNetwork?: boolean
+  erc20?: {
+    symbol: string
+    address: string
+  } | null
+  maxFreeClaimCost?: number // in cents!
+  nativeCurrency: Omit<Token, 'address'>
+  startBlock?: number
+  previousDeploys?: NetworkDeploy[]
+  description: string
+  url?: string
+  faucets?: Faucet[]
+  tokens?: Token[]
+  hooks?: Partial<Record<HookName, Hook[]>>
+  fullySubsidizedGas?: boolean
+}
+
 export interface NetworkConfigs {
   [networkId: string]: NetworkConfig
+}
+
+export interface ContractAbi {
+  contractName: string
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  abi: Array<{}>
+  bytecode: string
+  deployedBytecode: string
+  compiler: string
+  schemaVersion: string
+  updatedAt: string
 }
 
 export interface Transaction {
@@ -67,44 +223,6 @@ export interface ChainExplorerURLBuilders {
   [site: string]: (_address: string) => string
 }
 
-export interface PaywallCallToAction {
-  default: string
-  expired: string
-  pending: string
-  confirmed: string
-  noWallet: string
-  metadata: string
-}
-
-export interface PaywallConfigLocks {
-  [address: string]: PaywallConfigLock
-}
-
-export interface PaywallConfigLock {
-  name?: string
-  network?: number
-}
-
-export interface MetadataInput {
-  name: string
-  type: 'text' | 'date' | 'color' | 'email' | 'url'
-  required: boolean
-  public?: true // optional, all non-public fields are treated as protected
-}
-
-// This interface describes an individual paywall's config
-export interface PaywallConfig {
-  pessimistic?: boolean
-  icon?: string
-  unlockUserAccounts?: true | 'true' | false
-  callToAction: PaywallCallToAction
-  locks: PaywallConfigLocks
-  metadataInputs?: MetadataInput[]
-  persistentCheckout?: boolean
-  useDelegatedProvider?: boolean
-  network: number
-}
-
 export enum KeyStatus {
   NONE = 'none',
   CONFIRMING = 'confirming',
@@ -136,6 +254,8 @@ export interface Lock {
   expirationDuration: number
   key: Key
   currencyContractAddress: string | null
+  currencyDecimals?: number | null
+  currencySymbol?: string | null
   asOf?: number
   maxNumberOfKeys?: number
   outstandingKeys?: number

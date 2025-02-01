@@ -1,15 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { usePostmateParent } from './usePostmateParent'
-import { PaywallConfig } from '../unlockTypes'
+import { PaywallConfigType } from '@unlock-protocol/core'
+import { OAuthConfig } from '~/unlockTypes'
+import { useProvider } from './useProvider'
+import { isInIframe } from '~/utils/iframe'
 
 export interface UserInfo {
   address?: string
   signedMessage?: string
+  message?: string
 }
 
 export interface TransactionInfo {
   hash: string
   lock?: string
+  metadata?: any
+  tokenIds?: string[]
+  network?: number
 }
 
 export enum CheckoutEvents {
@@ -17,11 +24,14 @@ export enum CheckoutEvents {
   userInfo = 'checkout.userInfo',
   closeModal = 'checkout.closeModal',
   transactionInfo = 'checkout.transactionInfo',
+  metadata = 'checkout.metadata',
   methodCall = 'checkout.methodCall',
   onEvent = 'checkout.onEvent',
+  resolveMethodCall = 'checkout.resolveMethodCall',
+  resolveOnEventCall = 'checkout.resolveOnEventCall',
 }
 
-type Payload = UserInfo | TransactionInfo | MethodCall | string
+type Payload = UserInfo | TransactionInfo | MethodCall | any
 
 interface BufferedEvent {
   kind: CheckoutEvents
@@ -31,7 +41,7 @@ interface BufferedEvent {
 export interface MethodCall {
   method: string
   params: any
-  id: number
+  id: string
 }
 
 export interface MethodCallResult {
@@ -42,11 +52,13 @@ export interface MethodCallResult {
 
 // Taken from https://github.com/ethers-io/ethers.js/blob/master/src.ts/providers/web3-provider.ts
 export type AsyncSendable = {
+  parentOrigin: () => string
   enable: () => void
-  isMetaMask?: boolean
-  host?: string
-  path?: string
   sendAsync?: (
+    request: any,
+    callback: (error: any, response: any) => void
+  ) => void
+  request?: (
     request: any,
     callback: (error: any, response: any) => void
   ) => void
@@ -58,7 +70,7 @@ export type AsyncSendable = {
 // iframe are held here, once the parent iframe has resolved the call
 // it will trigger the callback and remove it from the table.
 export const waitingMethodCalls: {
-  [id: number]: (error: any, response: any) => void
+  [id: string]: (error: any, response: any) => void
 } = {}
 // TODO: see if we can support multiple handlers for same event name
 export const eventHandlers: {
@@ -82,8 +94,8 @@ export const resolveMethodCall = (result: MethodCallResult) => {
   callback(result.error, result.response)
 }
 
-export const resolveOnEnable = () => {
-  enabled()
+export const resolveOnEnable = (accounts: string[]) => {
+  enabled(accounts)
 }
 
 export const resolveOnEvent = (name: string) => {
@@ -96,44 +108,127 @@ export const resolveOnEvent = (name: string) => {
 // This is just a convenience hook that wraps the `emit` function
 // provided by the parent around some communication helpers. If any
 // events are called before the handshake completes, they go into a
-// buffer. After that, once the handle to the parent is available, all
-// the buffered events are emitted and future events are emitted
+// outgoingBuffer. After that, once the handle to the parent is available,
+// all the buffered events are emitted and future events are emitted
 // directly.
 export const useCheckoutCommunication = () => {
-  const [providerAdapter, setProviderAdapter] = useState<
-    AsyncSendable | undefined
+  const { setProvider } = useProvider()
+  const [outgoingBuffer, setOutgoingBuffer] = useState([] as BufferedEvent[])
+  const [incomingBuffer, setIncomingBuffer] = useState([] as MethodCall[])
+  const [paywallConfig, setPaywallConfig] = useState<
+    PaywallConfigType | undefined
   >(undefined)
-  const [buffer, setBuffer] = useState([] as BufferedEvent[])
-  const [config, setConfig] = useState<PaywallConfig | undefined>(undefined)
-  const parent = usePostmateParent({
-    setConfig: (config: PaywallConfig) => {
-      setConfig(config)
-    },
-    resolveMethodCall,
-    resolveOnEvent,
-    resolveOnEnable,
-  })
+  const [oauthConfig, setOauthConfig] = useState<OAuthConfig | undefined>(
+    undefined
+  )
+  const { provider } = useProvider()
+  const [user, setUser] = useState<string | undefined>(undefined)
 
   const pushOrEmit = (kind: CheckoutEvents, payload?: Payload) => {
+    if (!isInIframe()) {
+      // Not in an iframe? don't emit!
+      return
+    }
     if (!parent) {
-      setBuffer([...buffer, { kind, payload }])
+      setOutgoingBuffer([...outgoingBuffer, { kind, payload }])
     } else {
       parent.emit(kind, payload)
     }
   }
 
-  // Once parent is available, we flush the buffer
+  // Handler for messages from the parent
+  const handleMethodCallEvent = useCallback(
+    async ({ id, params, method }: MethodCall) => {
+      if (!provider) {
+        setIncomingBuffer([...incomingBuffer, { id, params, method }])
+      } else if (provider.send) {
+        return provider
+          .send(method, params)
+          .then((response: unknown) => {
+            pushOrEmit(CheckoutEvents.resolveMethodCall, {
+              id,
+              error: null,
+              response,
+            })
+          })
+          .catch((error: Error) => {
+            pushOrEmit(CheckoutEvents.resolveMethodCall, {
+              id,
+              error,
+              response: null,
+            })
+          })
+      } else {
+        pushOrEmit(CheckoutEvents.resolveMethodCall, {
+          id,
+          error:
+            'unknown method to call provider! Please make sure you use and EIP1193 provider!',
+          response: null,
+        })
+      }
+    },
+    [incomingBuffer, provider, pushOrEmit]
+  )
+
+  const parent = usePostmateParent({
+    setConfig: (config: PaywallConfigType) => {
+      setPaywallConfig(config)
+      setOauthConfig(undefined)
+    },
+    authenticate: (config: any) => {
+      setOauthConfig({
+        clientId: config?.clientId,
+        responseType: config?.responseType ?? '',
+        state: config?.state ?? '',
+        redirectUri: config?.redirectUri ?? '',
+      })
+      setPaywallConfig(undefined)
+    },
+    resolveMethodCall,
+    resolveOnEvent,
+    resolveOnEnable,
+    handleMethodCallEvent,
+    handleOnEvent: async (eventName: string) => {
+      if (!provider) {
+        return
+      }
+      return provider.on(eventName, () => {
+        pushOrEmit(CheckoutEvents.resolveOnEventCall, eventName)
+      })
+    },
+  })
+
+  // Once parent is available, we flush the outgoingBuffer
   useEffect(() => {
-    if (parent && buffer.length > 0) {
-      buffer.forEach((event) => {
+    if (parent && outgoingBuffer.length > 0) {
+      outgoingBuffer.forEach((event) => {
         parent.emit(event.kind, event.payload)
       })
-      setBuffer([])
+      setOutgoingBuffer([])
     }
-  }, [parent, buffer])
+  }, [parent, outgoingBuffer])
+
+  // Once provider is available, we flush the incomingBuffer
+  useEffect(() => {
+    if (provider && incomingBuffer.length > 0) {
+      incomingBuffer.forEach(({ id, params, method }) => {
+        handleMethodCallEvent({ id, params, method })
+      })
+      setIncomingBuffer([])
+    }
+  }, [provider, incomingBuffer, handleMethodCallEvent])
 
   const emitUserInfo = (info: UserInfo) => {
+    // if user already emitted, avoid re-emitting
+    if (info.address === user && !info.signedMessage) {
+      return
+    }
+    setUser(info.address)
     pushOrEmit(CheckoutEvents.userInfo, info)
+  }
+
+  const emitMetadata = (metadata: any) => {
+    pushOrEmit(CheckoutEvents.metadata, metadata)
   }
 
   const emitCloseModal = () => {
@@ -155,40 +250,73 @@ export const useCheckoutCommunication = () => {
   const emitOnEvent = (eventName: string) => {
     pushOrEmit(CheckoutEvents.onEvent, eventName)
   }
-  // If the page is not inside an iframe, window and window.top will be identical
-  const insideIframe = window.top !== window
 
-  if (config && config.useDelegatedProvider && !providerAdapter) {
-    setProviderAdapter({
-      enable: () => {
-        return new Promise((resolve) => {
-          enabled = resolve
-          emitEnable()
-        })
-      },
-      sendAsync: (request: MethodCall, callback) => {
-        waitingMethodCalls[request.id] = (error: any, response: any) => {
-          callback(error, response)
-        }
-        emitMethodCall(request)
-      },
-      on: (event: string, callback: any) => {
-        eventHandlers[event] = callback
-        emitOnEvent(event)
-      },
-    })
-  }
+  const useDelegatedProvider =
+    paywallConfig?.useDelegatedProvider || oauthConfig?.useDelegatedProvider
+
+  useEffect(() => {
+    if (useDelegatedProvider) {
+      setProvider({
+        parentOrigin: () => {
+          // @ts-expect-error Property 'parentOrigin' does not exist on type 'ChildAPI'.ts(2339)
+          return parent?.parentOrigin
+        },
+        enable: () => {
+          return new Promise((resolve) => {
+            enabled = resolve
+            emitEnable()
+          })
+        },
+        sendAsync: (request: MethodCall, callback: any) => {
+          if (!request.id) {
+            request.id = window.crypto.randomUUID()
+          }
+          waitingMethodCalls[request.id] = (error: any, response: any) => {
+            callback(error, response)
+          }
+          emitMethodCall(request)
+        },
+        request: async (request: MethodCall) => {
+          if (!request.id) {
+            // Assigning an id because they may be returned in a different order
+            try {
+              request.id = window.crypto.randomUUID()
+            } catch (error) {
+              console.error(error)
+              request.id = Math.floor(Math.random() * 100000000).toString() // fallback
+            }
+          }
+          return new Promise((resolve, reject) => {
+            waitingMethodCalls[request.id] = (error: any, response: any) => {
+              if (error) {
+                reject(error)
+              } else {
+                resolve(response)
+              }
+            }
+            emitMethodCall(request)
+          })
+        },
+        on: (event: string, callback: any) => {
+          eventHandlers[event] = callback
+          emitOnEvent(event)
+        },
+      })
+    }
+  }, [useDelegatedProvider])
 
   return {
     emitUserInfo,
     emitCloseModal,
     emitTransactionInfo,
+    emitMetadata,
     emitMethodCall,
-    paywallConfig: config,
-    providerAdapter,
-    insideIframe,
+    paywallConfig,
+    oauthConfig,
     // `ready` is primarily provided as an aid for testing the buffer
     // implementation.
     ready: !!parent,
   }
 }
+
+export type CheckoutCommunication = ReturnType<typeof useCheckoutCommunication>

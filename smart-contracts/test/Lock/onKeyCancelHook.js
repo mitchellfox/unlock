@@ -1,49 +1,59 @@
-const { constants } = require('hardlydifficult-ethereum-contracts')
-const { reverts } = require('truffle-assertions')
-const deployLocks = require('../helpers/deployLocks')
+const assert = require('assert')
+const { ethers } = require('hardhat')
 
-const unlockContract = artifacts.require('Unlock.sol')
-const TestEventHooks = artifacts.require('TestEventHooks.sol')
-const getProxy = require('../helpers/proxy')
+const { deployLock, ADDRESS_ZERO, purchaseKey } = require('../helpers')
+const {
+  emitHookUpdatedEvent,
+  canNotSetNonContractAddress,
+} = require('./behaviors/hooks.js')
 
-let lock
-let locks
-let unlock
-let testEventHooks
-
-contract('Lock / onKeyCancelHook', (accounts) => {
-  const from = accounts[1]
-  const to = accounts[2]
-  let keyPrice
+describe('Lock / onKeyCancelHook', () => {
+  let lock
+  let testEventHooks
+  let to
+  let tokenId
+  let receipt
 
   before(async () => {
-    unlock = await getProxy(unlockContract)
-    locks = await deployLocks(unlock, accounts[0])
-    lock = locks.FIRST
-    testEventHooks = await TestEventHooks.new()
-    await lock.setEventHooks(constants.ZERO_ADDRESS, testEventHooks.address)
-    keyPrice = await lock.keyPrice()
-    await lock.purchase(0, to, constants.ZERO_ADDRESS, [], {
-      from,
-      value: keyPrice,
+    ;[, to] = await ethers.getSigners()
+
+    lock = await deployLock({ isEthers: true })
+    const TestEventHooks = await ethers.getContractFactory('TestEventHooks')
+    testEventHooks = await TestEventHooks.deploy()
+    const tx = await lock.setEventHooks(
+      ADDRESS_ZERO,
+      await testEventHooks.getAddress(),
+      ADDRESS_ZERO,
+      ADDRESS_ZERO,
+      ADDRESS_ZERO,
+      ADDRESS_ZERO,
+      ADDRESS_ZERO,
+      ADDRESS_ZERO
+    )
+    receipt = await tx.wait()
+    ;({ tokenId } = await purchaseKey(lock, await to.getAddress()))
+  })
+
+  it('emit the correct event', async () => {
+    await emitHookUpdatedEvent({
+      receipt,
+      hookName: 'onKeyCancelHook',
+      hookAddress: await testEventHooks.getAddress(),
     })
-    const ID = await lock.getTokenIdFor.call(to)
-    await lock.cancelAndRefund(ID, { from: to })
   })
 
   it('key cancels should log the hook event', async () => {
-    const log = (await testEventHooks.getPastEvents('OnKeyCancel'))[0]
-      .returnValues
-    assert.equal(log.lock, lock.address)
-    assert.equal(log.operator, to)
-    assert.equal(log.to, to)
-    assert.notEqual(log.refund, 0)
+    await lock.connect(to).cancelAndRefund(tokenId)
+    const { args } = (await testEventHooks.queryFilter('OnKeyCancel')).filter(
+      ({ fragment }) => fragment.name === 'OnKeyCancel'
+    )[0]
+    assert.equal(args.lock, await lock.getAddress())
+    assert.equal(args.operator, await to.getAddress())
+    assert.equal(args.to, await to.getAddress())
+    assert.notEqual(args.refund, 0)
   })
 
   it('cannot set the hook to a non-contract address', async () => {
-    await reverts(
-      lock.setEventHooks(constants.ZERO_ADDRESS, accounts[1]),
-      'INVALID_ON_KEY_CANCEL_HOOK'
-    )
+    await canNotSetNonContractAddress({ lock, index: 1 })
   })
 })

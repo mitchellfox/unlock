@@ -6,13 +6,34 @@ import {
   waitingMethodCalls,
   resolveMethodCall,
 } from '../../hooks/useCheckoutCommunication'
+import { vi, expect, beforeEach, it, describe } from 'vitest'
 
-let emit = jest.fn()
+// mock useWallets
+vi.mock('@privy-io/react-auth', () => ({
+  useWallets: () => ({
+    wallets: [
+      {
+        getEthersProvider: vi.fn().mockResolvedValue({
+          getNetwork: vi.fn().mockResolvedValue({ chainId: 1 }),
+        }),
+        switchChain: vi.fn(),
+      },
+    ],
+  }),
+}))
+
+let emit = vi.fn()
+
+vi.mock('~/utils/iframe', async () => {
+  return {
+    isInIframe: () => true,
+  }
+})
 
 describe('useCheckoutCommunication', () => {
   beforeEach(() => {
-    emit = jest.fn()
-    jest.spyOn(Postmate, 'Model').mockResolvedValue({ emit })
+    emit = vi.fn()
+    vi.spyOn(Postmate, 'Model').mockResolvedValue({ emit })
   })
 
   it('emits a userInfo event when emitUserInfo is called', async () => {
@@ -67,7 +88,7 @@ describe('useCheckoutCommunication', () => {
 
     await waitFor(() => result.current.ready)
 
-    const methodCall = { method: 'net_version', id: 42, params: [] }
+    const methodCall = { method: 'net_version', id: '42', params: [] }
     result.current.emitMethodCall(methodCall)
 
     expect(emit).toHaveBeenCalledWith(CheckoutEvents.methodCall, methodCall)
@@ -109,8 +130,8 @@ describe('useCheckoutCommunication', () => {
 })
 
 describe('useCheckoutCommunication - resolveMethodCall', () => {
-  const resultCallback = jest.fn()
-  const errorCallback = jest.fn()
+  const resultCallback = vi.fn()
+  const errorCallback = vi.fn()
   waitingMethodCalls[1] = resultCallback
   waitingMethodCalls[2] = errorCallback
 

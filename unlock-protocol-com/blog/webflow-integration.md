@@ -1,18 +1,19 @@
 ---
 title: Webflow Integration
-subTitle: Why its awesome and how to integrate with Webflow
+subTitle: Why it's awesome and how to integrate with Webflow
 authorName: Sascha Mombartz
 publishDate: May 26, 2021
 description: A surprisingly easy and powerful tutorial on how to integrate Unlock into Webflow and monetize your content.
 image: /images/blog/webflow-integration/webflow-integration-hero.png
 ---
+
 ![Webflow](/images/blog/webflow-integration/webflow-home-hero.png)
 
 As a designer I love Webflow. It combines powerful design tools with no hassle CSS, responsive layouts and great cross-browser compatibility. All this lets the technical aspects fade into the background and lets me focus on the design and the user experience. On top of that it also offers a huge amount of flexibility and custom integrations.
 
-When I looked into integrating Unlock I had a feeling it would be possible but I got super excited when I realized how easy it was. Integrations like these take Webflow from a basic web creation tool towards a much more robust no code and web app platform. It's really awesome to see how you can integrate  a decentralized and permissionless membership on top of your website.
+When I looked into integrating Unlock I had a feeling it would be possible but I got super excited when I realized how easy it was. Integrations like these take Webflow from a basic web creation tool towards a much more robust no code and web app platform. It's really awesome to see how you can integrate a decentralized and permissionless membership on top of your website.
 
-One thing you'll need for the configuration is a lock that you can create on the Unlock dashboard -- it's very straightforward. For more info check out this article in [our docs](https://docs.unlock-protocol.com/creators/deploying-lock).
+One thing you'll need for the configuration is a lock that you can create on the Unlock dashboard -- it's very straightforward. For more info check out this article in [our Guides](https://unlock-protocol.com/guides/guide-to-the-unlock-protocol-wordpress-plugin/).
 The integration process is straightforward: You start with embedding Unlock's paywall, configuration, event handler and trigger scripts and then adding a few lines of css to control the visibility. All of this is copy and pasting, and shouldn't take longer than 5 to 10 minutes. The final step is to add specific selectors/classes to your elements. Check out [the demo](https://unlock-integration.webflow.io/) and more detailed instructions below and [on the integration site](https://unlock-integration.webflow.io/instructions). You can also clone the project from the [showcase page](https://webflow.com/website/Integrating-Unlock).
 
 ![Webflow Selector Panel Locked](/images/blog/webflow-integration/webflow-selector-locked.png)
@@ -59,22 +60,27 @@ The link and button that bring up the Unlock paywall are also special and they b
 ```html
 <button
   class="unlock-content locked"
-  onclick="window.unlockProtocol && window.unlockProtocol.loadCheckoutModal()">
+  onclick="window.unlockProtocol && window.unlockProtocol.loadCheckoutModal()"
+>
   Unlock!
 </button>
 ```
 
 **Link**
+
 ```html
 <a
   class="link"
-  onclick="window.unlockProtocol && window.unlockProtocol.loadCheckoutModal()">
-    Become a member
-</a> to read and submit comments.
+  onclick="window.unlockProtocol && window.unlockProtocol.loadCheckoutModal()"
+>
+  Become a member
+</a>
+to read and submit comments.
 ```
+
 ## 3. Paywall Integration
 
-You need to add the Paywall Script, Paywall Configuration, Event Handler and Unlock CSS to the Head Code in the Custom Code section of your site which you can access from the the the head section of your website. You can find all of the code that needs to go into the head here.
+You need to add the Paywall Script, Paywall Configuration, Event Handler and Unlock CSS to the Head Code in the Custom Code section of your site which you can access from the head section of your website. You can find all of the code that needs to go into the head here.
 
 **Paywall Script**
 
@@ -91,11 +97,12 @@ You need to add the Paywall Script, Paywall Configuration, Event Handler and Unl
 ```
 
 **Paywall Configuration**
+
 ```js
 <!-- Unlock Paywall Application Configuration -->
 <script>
   var unlockProtocolConfig = {
-    network: "100", // Network ID (1 is for mainnet, 4 for rinkeby... etc)
+    network: "100", // Network ID (1 is for mainnet, 5 for goerli, 100 for Gnosis chain... etc)
     locks: {
         "0xef6389F33ac557405C961030Efcc3b1CE3e6bc17": {
           "name": "Webflow Integration"
@@ -110,12 +117,15 @@ You need to add the Paywall Script, Paywall Configuration, Event Handler and Unl
 ```
 
 **Events Handling**
+
 ```js
 <!-- Unlock Event Handler -->
 <script>
 window.addEventListener('unlockProtocol.status', function(event) {
   // We hide all .unlock-content elements
-  document.querySelector('.unlock-content').style.display = "none"
+  document.querySelectorAll('.unlock-content').forEach((element) => {
+    element.style.display = "none"
+  })
   // We show only the relevant element
   document.querySelectorAll(`.unlock-content.${event.detail.state}`).forEach((element) => {
   	element.style.display = "block"
@@ -133,6 +143,7 @@ window.addEventListener('unlockProtocol.transactionSent', function(event) {
 ```
 
 **CSS**
+
 ```js
 <!-- Styling the Unlock content to be initially hidden till the handler loads to prevent flickering -->
 <style>

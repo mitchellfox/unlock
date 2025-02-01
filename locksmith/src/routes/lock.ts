@@ -1,8 +1,14 @@
 import express from 'express'
 import signatureValidationMiddleware from '../middlewares/signatureValidationMiddleware'
+import {
+  authMiddleware,
+  authenticatedMiddleware,
+} from '../utils/middlewares/auth'
+import { lockManagerMiddleware } from '../utils/middlewares/lockManager'
+import lockController from '../controllers/lockController'
+import { createCacheMiddleware } from '../utils/middlewares/cacheMiddleware'
 
-const router = express.Router({ mergeParams: true })
-const lockController = require('../controllers/lockController')
+const router: express.Router = express.Router({ mergeParams: true })
 
 const connectStripeConfiguration = {
   name: 'Connect Stripe',
@@ -16,10 +22,22 @@ const changeLockIconConfiguration = {
   signee: 'lockManager',
 }
 
-router.post('/lock', lockController.lockSave)
-router.get('/lock/:lockAddress', lockController.lockGet)
-router.get('/lock/:lockAddress/cycle', lockController.lockOwnershipCheck)
-router.get('/lock/:lockAddress/icon', lockController.lockIcon)
+router.get(
+  '/lock/:lockAddress/icon',
+  createCacheMiddleware(),
+  lockController.lockIcon
+)
+
+router.get(
+  '/:network/lock/:lockAddress/icon',
+  createCacheMiddleware(),
+  lockController.lockIcon
+)
+
+router.get(
+  '/image/:network/:lockAddress/:keyId?',
+  lockController.getTokenURIImage
+)
 
 router.post(
   '/lock/:lockAddress/icon',
@@ -35,11 +53,17 @@ router.get(
 )
 router.get('/lock/:lockAddress/stripe', lockController.connectStripe)
 
+router.delete(
+  '/:network/lock/:lockAddress/stripe',
+  authMiddleware,
+  authenticatedMiddleware,
+  lockManagerMiddleware,
+  lockController.disconnectStripe
+)
+
 router.get(
   '/lock/:lockAddress/stripe-connected',
   lockController.stripeConnected
 )
 
-router.get('/:owner/locks', lockController.lockOwnerGet)
-
-module.exports = router
+export default router

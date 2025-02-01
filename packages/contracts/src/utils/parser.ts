@@ -1,77 +1,73 @@
-const fs = require('fs-extra');
-const path = require('path');
+import { getAbiPaths } from './files'
 
-const listFiles = async ( folderName: String ) => {
+type contractVersion = {
+  contractName: string
+  versionNumber: string
+  abiPath: string
+}
 
-    const folderPath = path.resolve('src', folderName)
+const PUBLICLOCK_LATEST_VERSION = 14
+const UNLOCK_LATEST_VERSION = 13
 
-    if (!await fs.pathExists(folderPath)) throw new Error(`path not found: ${folderPath}`)
+const exportLatest = (contract: string, versionNumber: number) => {
+  const varName = `${contract.toLocaleUpperCase()}_LATEST_VERSION`
 
-    try {
-        const files = await fs.readdir(folderPath);
-        return files
-    } catch (err) {
-        console.log(err);
+  console.log(`export { ${contract}V${versionNumber} as ${contract} }`)
+  console.log(`const ${varName} = ${versionNumber}`)
+  console.log(`export { ${varName} }`)
+}
+
+async function main() {
+  const paths = await getAbiPaths()
+  const exports: contractVersion[] = paths.flat().map((abiPath: string) => {
+    let contractName, fileName, versionNumber
+    if (abiPath.includes('/utils/')) {
+      ;[, , , fileName] = abiPath.split('/')
+      contractName = fileName.replace('.json', '')
+    } else {
+      ;[, , contractName, fileName] = abiPath.split('/')
+      versionNumber = fileName.replace(contractName, '').replace('.json', '')
     }
-}
+    return {
+      contractName,
+      versionNumber,
+      abiPath,
+    }
+  })
 
-const parseExports = async (folderName : String) => {
-    const files = await listFiles(folderName)
-    const exports = files
-        .filter((f: String) => f.includes('.json'))
-        .map((f: String) => `./${folderName}/${f}`)
+  console.log("// This file is generated, please don't edit directly")
+  console.log("// Refer to 'utils/parser.ts' and 'yarn build:index' for more\n")
 
-    //make sure all paths exists
-    exports.forEach(async (f: String) => await fs.pathExists(path.resolve(f)))
+  exports.forEach(({ contractName, versionNumber = '', abiPath }) =>
+    console.log(`import ${contractName}${versionNumber} from '${abiPath}'`)
+  )
 
-    return exports
-}
+  console.log('\n// exports')
 
-async function main () {
-    const folders = [
-        'abis/PublicLock',
-        'abis/Unlock',
-        'abis/UnlockDiscountToken',
-    ]
-    
-    const paths = await Promise.all(
-        folders.map(async f => await parseExports(f))
-    )
+  exports.forEach(({ contractName, versionNumber = '' }) =>
+    console.log(`export { ${contractName}${versionNumber} }`)
+  )
 
-    const exports = paths
-        .flat()
-        .map(abiPath => {
-            const s = abiPath.split('/')
-            const contractName = s[2]
-            const versionNumber = s[3].replace(contractName, '').replace('.json', '')            
-            return {
-                contractName,
-                versionNumber,
-                abiPath
-            }
-        })
+  // alias for all contracts
+  console.log(
+    `const contracts = { ${exports
+      .map(
+        ({ contractName, versionNumber = '' }) =>
+          `${contractName}${versionNumber}`
+      )
+      .toString()} } 
+      export { contracts }`
+  )
 
-    console.log('// This file is generated, please don\'t edit directly')
-    console.log('// Refer to \'utils/parser.ts\' and \'yarn build:index\' for more\n')
-
-    exports.forEach(({
-        contractName,
-        versionNumber,
-        abiPath
-    }) => console.log(`import ${contractName}${versionNumber} from '${abiPath}' `))
-    
-    console.log(`\n\n// exports`)
-    
-    exports.forEach(({
-        contractName,
-        versionNumber
-    }) => console.log(`export {${contractName}${versionNumber}}`))
-    
+  // alias for the newest versions
+  console.log('\n// latest')
+  exportLatest('PublicLock', PUBLICLOCK_LATEST_VERSION)
+  exportLatest('Unlock', UNLOCK_LATEST_VERSION)
 }
 
 main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-        console.error(error)
-        process.exit(1)
-    })
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })

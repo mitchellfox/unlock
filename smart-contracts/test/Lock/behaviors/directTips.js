@@ -1,4 +1,7 @@
-const { constants } = require('hardlydifficult-ethereum-contracts')
+const assert = require('assert')
+const { ethers } = require('hardhat')
+const { ADDRESS_ZERO } = require('../../helpers')
+const { getBalance } = require('../../helpers')
 
 module.exports.getBalanceBehavior = (options) => {
   describe('Lock / behaviors / directTips', () => {
@@ -6,18 +9,18 @@ module.exports.getBalanceBehavior = (options) => {
 
     beforeEach(async () => {
       ;({ lock } = options)
-      await web3.eth.sendTransaction({ to: lock, value: 42 })
+      await ethers.provider.sendTransaction({ to: lock, value: 42 })
     })
 
     it('ETH tip balance appears', async () => {
-      const balance = await web3.eth.balanceOf(lock)
-      assert.equal(balance.toString(), 42)
+      const balance = await getBalance(lock)
+      assert.equal(balance, 42)
     })
 
     it('can withdraw ETH', async () => {
-      await lock.withdraw(constants.ZERO_ADDRESS)
-      const balance = await web3.eth.balanceOf(lock)
-      assert.equal(balance.toString(), 0)
+      await lock.withdraw(ADDRESS_ZERO)
+      const balance = await getBalance(lock)
+      assert.equal(balance, 0)
     })
   })
 }

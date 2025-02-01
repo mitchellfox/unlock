@@ -1,18 +1,44 @@
-/* eslint-disable no-underscore-dangle */
-let _unlockAppUrl: string
-let _locksmithUri: string
-const baseUrl =
-  document?.currentScript?.getAttribute('src') || 'paywall.unlock-protocol.com' // assume prod
+let baseUrl = 'https://paywall.unlock-protocol.com' // assume prod
 
-if (baseUrl.match('staging-paywall.unlock-protocol.com')) {
-  _unlockAppUrl = 'https://staging-app.unlock-protocol.com'
-  _locksmithUri = 'https://staging-locksmith.unlock-protocol.com'
-} else if (baseUrl.match('paywall.unlock-protocol.com')) {
-  _unlockAppUrl = 'https://app.unlock-protocol.com'
-  _locksmithUri = 'https://locksmith.unlock-protocol.com'
-} else {
-  _unlockAppUrl = 'http://0.0.0.0:3000'
-  _locksmithUri = 'http://0.0.0.0:8080'
+const getURL = (url: string) => {
+  try {
+    return new URL(url)
+  } catch {
+    return null
+  }
 }
-export const unlockAppUrl: string = _unlockAppUrl
-export const locksmithUri: string = _locksmithUri
+
+if (typeof window !== 'undefined') {
+  const url = document?.currentScript?.getAttribute('src')
+  if (url) {
+    const paywallUrl = getURL(url)
+    if (
+      paywallUrl &&
+      // check if is unlock
+      [
+        'paywall.unlock-protocol.com',
+        'staging-paywall.unlock-protocol.com',
+      ].includes(paywallUrl.hostname)
+    ) {
+      baseUrl = paywallUrl.toString()
+    }
+  }
+}
+
+const endpoint = new URL(baseUrl)
+
+export function getConfigUrl(url: string) {
+  let unlockAppUrl: string
+  if (url.match('staging-paywall.unlock-protocol.com')) {
+    unlockAppUrl = 'https://staging-app.unlock-protocol.com'
+  } else if (url.match('paywall.unlock-protocol.com')) {
+    unlockAppUrl = 'https://app.unlock-protocol.com'
+  } else {
+    unlockAppUrl = 'http://localhost:3000'
+  }
+  return {
+    unlockAppUrl,
+  }
+}
+
+export const { unlockAppUrl } = getConfigUrl(endpoint.toString())

@@ -1,60 +1,57 @@
-const BigNumber = require('bignumber.js')
-const getProxy = require('../../helpers/proxy')
-const createLockHash = require('../../helpers/createLockCalldata')
+const assert = require('assert')
+const { ethers } = require('hardhat')
+const { getEvent } = require('@unlock-protocol/hardhat-helpers')
 
-const unlockContract = artifacts.require('Unlock.sol')
-const KeyManagerMock = artifacts.require('KeyManagerMock')
+let keyManagerMock
+let keyOwner, keyManager, random, notKeyManager
+let tokenId
+const expirationDuration = BigInt(60 * 60 * 24 * 30)
 
-let unlock
-let lock
-let lockCreator
-let lockAddress
-
-contract('Permissions / isKeyManager', (accounts) => {
-  lockCreator = accounts[0]
-  const keyPrice = new BigNumber(web3.utils.toWei('0.01', 'ether'))
+describe('Permissions / isKeyManager', () => {
   before(async () => {
-    unlock = await getProxy(unlockContract)
-    await unlock.setLockTemplate((await KeyManagerMock.new()).address)
-    const args = [
-      60 * 60 * 24 * 30, // 30 days
-      web3.utils.padLeft(0, 40),
-      web3.utils.toWei('0.01', 'ether'),
-      11,
-      'KeyManagerMockLock',
-    ]
+    ;[, keyOwner, keyManager, random, notKeyManager] = await ethers.getSigners()
+    // init template
+    const KeyManagerMock = await ethers.getContractFactory('KeyManagerMock')
 
-    const calldata = await createLockHash({ args, from: lockCreator })
-    let tx = await unlock.createLock(calldata)
-    lockAddress = tx.logs[0].args.newLockAddress
-    lock = await KeyManagerMock.at(lockAddress)
-    await lock.purchase(0, accounts[1], web3.utils.padLeft(0, 40), [], {
-      value: keyPrice.toFixed(),
-      from: accounts[1],
-    })
+    keyManagerMock = await KeyManagerMock.deploy()
+    const { timestamp } = await ethers.provider.getBlock('latest')
+    const timestampBefore = BigInt(timestamp) + expirationDuration
+
+    const tx = await keyManagerMock.createNewKey(
+      await keyOwner.getAddress(),
+      await keyManager.getAddress(),
+      timestampBefore
+    )
+    const receipt = await tx.wait()
+    ;({
+      args: { tokenId },
+    } = await getEvent(receipt, 'Transfer'))
   })
 
   describe('confirming the key manager', () => {
-    let isKeyManager
-    let iD
-
     it('should return true if address is the KM', async () => {
-      iD = await lock.getTokenIdFor.call(accounts[1])
-      isKeyManager = await lock.isKeyManager.call(iD, accounts[1], {
-        from: accounts[1],
-      })
-      assert.equal(isKeyManager, true)
+      assert.equal(
+        await keyManagerMock
+          .connect(keyManager)
+          .isKeyManager(tokenId, await keyManager.getAddress()),
+        true
+      )
       // it shouldn't matter who is calling
-      isKeyManager = await lock.isKeyManager.call(iD, accounts[1], {
-        from: accounts[5],
-      })
-      assert.equal(isKeyManager, true)
+      assert.equal(
+        await keyManagerMock
+          .connect(random)
+          .isKeyManager(tokenId, await keyManager.getAddress()),
+        true
+      )
     })
     it('should return false if address is not the KM', async () => {
-      isKeyManager = await lock.isKeyManager.call(iD, accounts[9], {
-        from: accounts[1],
-      })
-      assert.equal(isKeyManager, false)
+      assert.equal(
+        await keyManagerMock.isKeyManager(
+          tokenId,
+          await notKeyManager.getAddress()
+        ),
+        false
+      )
     })
   })
 })

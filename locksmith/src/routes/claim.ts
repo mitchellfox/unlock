@@ -1,16 +1,17 @@
 import express from 'express'
-import signatureValidationMiddleware from '../middlewares/signatureValidationMiddleware'
+import { PurchaseController } from '../controllers/purchaseController'
+import { createGeoRestriction } from '../utils/middlewares/geoRestriction'
 
-const router = express.Router({ mergeParams: true })
-const purchaseController = require('../controllers/purchaseController')
+const purchaseController = new PurchaseController()
+const router: express.Router = express.Router({ mergeParams: true })
+
+// Disallow claim due to spam and bot activity
+const geoRestriction = createGeoRestriction([])
 
 router.post(
-  '/',
-  signatureValidationMiddleware.generateProcessor({
-    name: 'Claim Membership',
-    required: ['publicKey', 'lock', 'publicKey'],
-    signee: 'publicKey',
-  })
+  '/:network/locks/:lockAddress',
+  geoRestriction,
+  async (req, res) => await purchaseController.canClaim(req, res)
 )
-router.post('/', purchaseController.claim)
-module.exports = router
+
+export default router

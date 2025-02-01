@@ -1,34 +1,7 @@
-import { useContext, useState } from 'react'
-import { WalletService } from '@unlock-protocol/unlock-js'
-import { Card } from '@stripe/stripe-js'
-import { WalletServiceContext } from '../utils/withWalletService'
-import { ConfigContext } from '../utils/withConfig'
-
-// TODO: cleanup. We don't need a hook but the API calls should be kept
-
-interface Config {
-  services: {
-    storage: {
-      host: string
-    }
-  }
-}
-
-export const genAuthorizationHeader = (token: string) => {
-  return { Authorization: ` Bearer ${token}` }
-}
-
 // Taken from locksmith's userController/cards.test.ts
-export function generateTypedData(message: any) {
+export function generateTypedData(message: any, messageKey: string) {
   return {
     types: {
-      EIP712Domain: [
-        { name: 'name', type: 'string' },
-        { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' },
-        { name: 'verifyingContract', type: 'address' },
-        { name: 'salt', type: 'bytes32' },
-      ],
       User: [{ name: 'publicKey', type: 'address' }],
     },
     domain: {
@@ -37,6 +10,7 @@ export function generateTypedData(message: any) {
     },
     primaryType: 'User',
     message,
+    messageKey,
   }
 }
 
@@ -51,191 +25,61 @@ export const getSignature = async (
   typedData: any,
   address: string
 ) => {
-  const signature = await walletService.unformattedSignTypedData(
-    address,
-    typedData
-  )
+  let signature
+  if (typedData.message['Charge Card']) {
+    const message = `I want to purchase a membership to ${typedData.message['Charge Card'].lock} for ${typedData.message['Charge Card'].publicKey} with my card.`
+    signature = await walletService.signMessage(message, 'personal_sign')
+  } else if (typedData.message['Get Card']) {
+    const message = `I want to retrieve the card token for ${typedData.message['Get Card'].publicKey}`
+    signature = await walletService.signMessage(message, 'personal_sign')
+  } else if (typedData.message['Save Card']) {
+    const message = `I save my payment card for my account ${typedData.message['Save Card'].publicKey}`
+    signature = await walletService.signMessage(message, 'personal_sign')
+  } else if (typedData.message['Delete Card']) {
+    const message = `I am deleting the card linked to my account ${typedData.message['Delete Card'].publicKey}`
+    signature = await walletService.signMessage(message, 'personal_sign')
+  } else if (typedData.message['Claim Membership']) {
+    const message = `I claim a membership for ${typedData.message['Claim Membership'].lock} to ${typedData.message['Claim Membership'].publicKey}`
+    signature = await walletService.signMessage(message, 'personal_sign')
+  } else {
+    signature = await walletService.unformattedSignTypedData(address, typedData)
+  }
+
   return signature
 }
 
 /**
- * @param walletService
+ * @param config
+ * @param lock
+ * @param network
  * @param address
+ * @param recipients
+ * @param paymentIntent
+ * @returns
  */
-export const chargeAndSaveCard = async (
+export const captureCharge = async (
   config: any,
-  walletService: any,
-  address: string,
-  stripeTokenId: string,
-  network: number,
   lock: string,
-  pricing: any
+  network: number,
+  address: string,
+  recipients: string[],
+  paymentIntent: string
 ) => {
-  const typedData = generateTypedData({
-    'Charge Card': {
-      publicKey: address,
-      stripeTokenId,
-      pricing,
-      lock,
-      network,
-    },
-  })
-
-  const signature = await getSignature(walletService, typedData, address)
-  const token = Buffer.from(signature).toString('base64')
-
   const opts = {
     method: 'POST',
     headers: {
-      ...genAuthorizationHeader(token),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(typedData),
-  }
-  const response = await fetch(`${config.services.storage.host}/purchase`, opts)
-  return response.json()
-}
-
-export const claimMembership = async (
-  config: any,
-  walletService: any,
-  address: string,
-  network: number,
-  lock: string
-) => {
-  const typedData = generateTypedData({
-    'Claim Membership': {
-      publicKey: address,
+    body: JSON.stringify({
       lock,
       network,
-    },
-  })
-
-  const signature = await getSignature(walletService, typedData, address)
-  const token = Buffer.from(signature).toString('base64')
-
-  const opts = {
-    method: 'POST',
-    headers: {
-      ...genAuthorizationHeader(token),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(typedData),
+      userAddress: address,
+      recipients,
+      paymentIntent,
+    }),
   }
-  const response = await fetch(`${config.services.storage.host}/claim`, opts)
-  return response.json()
-}
-
-export const saveCardsForAddress = async (
-  config: any,
-  walletService: any,
-  address: string,
-  stripeTokenId: string
-) => {
-  const typedData = generateTypedData({
-    user: {
-      publicKey: address,
-      stripeTokenId,
-    },
-  })
-  const signature = await getSignature(walletService, typedData, address)
-  const token = Buffer.from(signature).toString('base64')
-
-  const opts = {
-    method: 'PUT',
-    headers: {
-      ...genAuthorizationHeader(token),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(typedData),
-  }
-
-  return fetch(
-    `${config.services.storage.host}/users/${encodeURIComponent(
-      address!
-    )}/credit-cards`,
-    opts
-  )
-}
-
-export const getCardsForAddress = async (
-  config: any,
-  walletService: any,
-  address: string
-) => {
-  const typedData = generateTypedData({
-    user: {
-      publicKey: address,
-    },
-  })
-  const signature = await getSignature(walletService, typedData, address)
-  const token = Buffer.from(signature).toString('base64')
-  const opts = {
-    method: 'GET',
-    headers: genAuthorizationHeader(token),
-  }
-
   const response = await fetch(
-    `${config.services.storage.host}/users/${encodeURIComponent(
-      address!
-    )}/credit-cards?data=${JSON.stringify(typedData)}`,
-    opts
-  )
-  return response.json()
-}
-
-/**
- * Deletes card for a given address
- * @param walletService
- * @param address
- */
-export const deleteCardForAddress = async (
-  config: any,
-  walletService: any,
-  address: string
-) => {
-  const typedData = generateTypedData({
-    user: {
-      publicKey: address,
-    },
-  })
-  const signature = await getSignature(walletService, typedData, address)
-  const token = Buffer.from(signature).toString('base64')
-
-  const opts = {
-    method: 'DELETE',
-    headers: {
-      ...genAuthorizationHeader(token),
-      'Content-Type': 'application/json',
-    },
-  }
-
-  const response = fetch(
-    `${config.services.storage.host}/users/${encodeURIComponent(
-      address!
-    )}/credit-cards?data=${JSON.stringify(typedData)}`,
-    opts
-  )
-  return (await response).status === 202
-}
-
-/**
- * Retrieves the pricing for a lock to be purchasable via credit card
- */
-export const getFiatPricing = async (
-  config: any,
-  lock: string,
-  network: number
-) => {
-  const opts = {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  }
-
-  const response = await fetch(
-    `${config.services.storage.host}/price/fiat/${lock}?chain=${network}`,
+    `${config.services.storage.host}/purchase/capture`,
     opts
   )
   return response.json()
@@ -258,60 +102,4 @@ export const getCardConnected = async (
     opts
   )
   return response.json()
-}
-
-export const useCards = (address: string) => {
-  const walletService: WalletService = useContext(WalletServiceContext)
-  const config: Config = useContext(ConfigContext)
-  const [cards, setCards] = useState<Card[]>([])
-  const [loading, setLoading] = useState<boolean>(true)
-  const [error, setError] = useState<Error | undefined>(undefined)
-
-  /**
-   * retrieves cards for an address
-   * @param address
-   */
-  const getCards = async () => {
-    setLoading(true)
-    try {
-      const cards = await getCardsForAddress(config, walletService, address)
-      setCards(cards)
-    } catch (e: any) {
-      setError(e)
-    }
-    setLoading(false)
-  }
-
-  /**
-   * saves cards (stripe token) for an address
-   * @param address
-   */
-  const saveCard = async (stripeTokenId: string) => {
-    setLoading(true)
-    try {
-      await saveCardsForAddress(config, walletService, address, stripeTokenId)
-      // Refresh cards: TODO make locksmith return the cards
-      await getCards()
-    } catch (e: any) {
-      setError(e)
-    }
-    setLoading(false)
-  }
-
-  /**
-   * Deletes a card for a user!
-   */
-  const deleteCard = async () => {
-    setLoading(true)
-    try {
-      const deleted = await deleteCardForAddress(config, walletService, address)
-      if (deleted) {
-        setCards([])
-      }
-    } catch (e: any) {
-      setError(e)
-    }
-    setLoading(false)
-  }
-  return { cards, error, loading, saveCard, deleteCard, getCards }
 }

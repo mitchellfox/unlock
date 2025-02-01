@@ -1,11 +1,18 @@
 // hardhat.config.js
-const { copySync } = require('fs-extra')
+const {
+  networks,
+  etherscan,
+  parseForkUrl,
+  initializeTasks,
+} = require('@unlock-protocol/hardhat-helpers')
 
-require('@nomiclabs/hardhat-ethers')
-require('@nomiclabs/hardhat-truffle5')
+require('@nomicfoundation/hardhat-ethers')
+
+//
+initializeTasks()
 
 // full stack trace if needed
-require('hardhat-tracer')
+// require('hardhat-tracer')
 
 // erc1820 deployment
 require('hardhat-erc1820')
@@ -22,15 +29,15 @@ require('hardhat-gas-reporter')
 // test coverage
 require('solidity-coverage')
 
-// eslint-disable-next-line global-require
-require('@nomiclabs/hardhat-etherscan')
+require('@nomicfoundation/hardhat-verify')
 
-const { getHardhatNetwork } = require('./helpers/network')
+// check contract size
+require('hardhat-contract-sizer')
 
 const settings = {
   optimizer: {
     enabled: true,
-    runs: 200,
+    runs: 80,
   },
   outputSelection: {
     '*': {
@@ -39,46 +46,17 @@ const settings = {
   },
 }
 
-const networks = getHardhatNetwork()
-
-// Etherscan api for verification
-const etherscan = process.env.ETHERSCAN_API_KEY
-  ? {
-      apiKey: process.env.ETHERSCAN_API_KEY,
-    }
-  : {}
-
-// add mainnet fork -- if API key is present
-if (process.env.RUN_MAINNET_FORK) {
-  // eslint-disable-next-line no-console
-  console.log('Running a mainnet fork...')
-  const alchemyAPIKey = process.env.ALCHEMY_API_KEY
-  if (!alchemyAPIKey) {
-    throw new Error('Missing Alchemy API Key, couldnt run a mainnet fork')
-  }
-  const alchemyURL = `https://eth-mainnet.alchemyapi.io/v2/${alchemyAPIKey}`
-  networks.hardhat = {
-    forking: {
-      url: alchemyURL,
-    },
-  }
-
-  // replace localhost manifest by mainnet one
-  copySync('.openzeppelin/mainnet.json', '.openzeppelin/unknown-31337.json')
+// mainnet fork
+if (process.env.RUN_FORK) {
+  parseForkUrl(networks)
 }
 
 // tasks
 require('./tasks/accounts')
-require('./tasks/balance')
-require('./tasks/config')
-require('./tasks/deploy')
-require('./tasks/impl')
 require('./tasks/upgrade')
-require('./tasks/set')
-require('./tasks/gnosis')
 require('./tasks/release')
-require('./tasks/gov')
 require('./tasks/utils')
+require('./tasks/keys')
 
 /**
  * @type import('hardhat/config').HardhatUserConfig
@@ -88,26 +66,29 @@ module.exports = {
   etherscan,
   gasReporter: {
     currency: 'USD',
-    excludeContracts: ['Migrations', 'TestNoop'],
+    excludeContracts: ['TestNoop'],
     gasPrice: 5,
   },
   solidity: {
     compilers: [
-      { version: '0.4.24', settings },
-      { version: '0.4.25', settings },
-      { version: '0.5.0', settings },
-      { version: '0.5.17', settings },
-      { version: '0.5.14', settings },
-      { version: '0.5.7', settings },
-      { version: '0.5.9', settings },
-      { version: '0.6.12', settings },
-      { version: '0.7.6', settings },
-      { version: '0.8.0', settings },
-      { version: '0.8.2', settings },
-      { version: '0.8.4', settings },
+      { version: '0.7.6', settings }, // required for uniswap
+      { version: '0.8.4', settings }, // required for test/Lock/upgrades/V10
+      { version: '0.8.7', settings }, // required for test/Lock/upgrades/V11
+      { version: '0.8.13', settings }, // required for test/Lock/upgrades/V12
+      {
+        version: '0.8.21',
+        settings: {
+          ...settings,
+          evmVersion: 'shanghai',
+        },
+      },
     ],
   },
   mocha: {
     timeout: 2000000,
+  },
+  contractSizer: {
+    alphaSort: true,
+    only: [':PublicLock', 'Mixin'],
   },
 }

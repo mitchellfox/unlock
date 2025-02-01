@@ -1,69 +1,60 @@
-import React, { useContext } from 'react'
-import { useQuery } from '@apollo/react-hooks'
-import styled from 'styled-components'
-import { AuthenticationContext } from '../Authenticate'
-import keyHolderQuery from '../../../queries/keyHolder'
-import 'cross-fetch/polyfill'
-import { DefaultError } from '../../creator/FatalError'
-import Loading from '../Loading'
-import { OwnedKey } from './KeychainTypes'
+import React from 'react'
 import Key from './Key'
-import LoginPrompt from '../LoginPrompt'
+import { ImageBar } from '../locks/Manage/elements/ImageBar'
+import { useKeys } from '~/hooks/useKeys'
+import { minifyAddress, Placeholder } from '@unlock-protocol/ui'
+import networks from '@unlock-protocol/networks'
+import { NetworkConfig } from '@unlock-protocol/types'
+import { useAuthenticate } from '~/hooks/useAuthenticate'
 
-export const KeyDetails = () => {
-  const { account, network } = useContext(AuthenticationContext)
-  const { loading, error, data } = useQuery(keyHolderQuery(), {
-    variables: { address: account },
+export const KeyDetails = ({ owner }: { owner: string }) => {
+  const { account } = useAuthenticate()
+  const { keys, isKeysLoading } = useKeys({
+    owner,
+    networks: Object.values(networks)
+      .filter((item: NetworkConfig) => !item.isTestNetwork || owner === account)
+      .map((item: NetworkConfig) => item.id),
   })
 
-  if (!account) {
-    return <LoginPrompt />
-  }
-
-  if (loading) return <Loading />
-  if (error) {
+  if (!keys?.length && !isKeysLoading) {
     return (
-      <DefaultError
-        title="Could not retrieve keys"
-        illustration="/static/images/illustrations/error.svg"
-        critical
-      >
-        {error.message}
-      </DefaultError>
+      <ImageBar
+        description={`The address ${minifyAddress(
+          owner
+        )} does not have any key yet`}
+        src="/images/illustrations/img-error.svg"
+      />
     )
   }
 
-  if (data.keyHolders.length == 0) {
-    return <NoKeys />
-  }
-
   return (
-    <Container>
-      {data.keyHolders[0].keys.map((key: OwnedKey) => (
-        <Key key={key.id} ownedKey={key} account={account} network={network} />
-      ))}
-    </Container>
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-6 pb-16 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {isKeysLoading &&
+          Array.from({ length: 10 }).map((_, index) => (
+            <Placeholder.Root
+              className="grid items-center justify-center gap-2 p-4 bg-white border border-gray-200 shadow-lg rounded-xl"
+              key={index}
+            >
+              <Placeholder.Line />
+              <Placeholder.Image className="w-[300px] h-[300px]" />
+              <Placeholder.Line />
+              <Placeholder.Line />
+              <Placeholder.Line />
+            </Placeholder.Root>
+          ))}
+        {!isKeysLoading &&
+          keys?.map((item: any) => (
+            <Key
+              key={item.id}
+              ownedKey={item}
+              owner={owner!}
+              network={item.network}
+            />
+          ))}
+      </div>
+    </div>
   )
 }
 
 export default KeyDetails
-
-export const NoKeys = () => {
-  return (
-    <DefaultError
-      title="You don't have any keys yet"
-      illustration="/static/images/illustrations/key.svg"
-      critical={false}
-    >
-      The Keychain lets you view and manage the keys that you own. As soon as
-      you have one, you&apos;ll see it on this page.
-    </DefaultError>
-  )
-}
-
-const Container = styled.div`
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  max-width: 100%;
-`
